@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  plexgifmaker:
+    build:
+      context: PlexGifMaker/
+      dockerfile: Dockerfile
+    image: plexgifmaker:latest
+    ports:
+      - "9000:80"
+      - "443:443"
+    volumes:
+      - plexgifmaker_keys:/usr/shared/plexgifmaker_keys
+    restart: unless-stopped
+
+volumes:
+  plexgifmaker_keys:
+    name: plexgifmaker_keys

@@ -1,0 +1,24 @@
+﻿<input type="time" class="@CssClass" @attributes="AdditionalAttributes" value="@Value" @onchange="OnValueChanged" />
+
+@code {
+    [Parameter]
+    public string? Value { get; set; }
+
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    private async Task OnValueChanged(ChangeEventArgs e)
+    {
+        // Update the Value property with the new input value
+        Value = e.Value?.ToString();
+
+        // Notify the parent component about the change
+        await ValueChanged.InvokeAsync(Value);
+    }
+}

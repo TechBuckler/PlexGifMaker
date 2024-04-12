@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.7.34031.279
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PlexGifMaker", "PlexGifMaker\PlexGifMaker.csproj", "{D47F8B89-8853-402D-B442-B3C2C867E8C5}"
+EndProject
+Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{291FD71B-227A-400A-9357-D2D09CF2D84E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{D47F8B89-8853-402D-B442-B3C2C867E8C5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D47F8B89-8853-402D-B442-B3C2C867E8C5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D47F8B89-8853-402D-B442-B3C2C867E8C5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D47F8B89-8853-402D-B442-B3C2C867E8C5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{291FD71B-227A-400A-9357-D2D09CF2D84E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{291FD71B-227A-400A-9357-D2D09CF2D84E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{291FD71B-227A-400A-9357-D2D09CF2D84E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{291FD71B-227A-400A-9357-D2D09CF2D84E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {46C2B0B5-B103-49A3-B825-0DADF258F525}
+	EndGlobalSection
+EndGlobal

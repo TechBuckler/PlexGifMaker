@@ -1,0 +1,524 @@
+﻿@page "/"
+@page "/index"
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using PlexGifMaker.Data
+@inject NavigationManager NavigationManager
+@inject ProtectedLocalStorage ProtectedLocalStorage
+@inject PlexService PlexService
+@inject ILogger<Index> _logger
+@using SubtitlesParser
+@using SubtitlesParser.Classes;
+@using System.Globalization
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">
+        @errorMessage
+    </div>
+}
+<h3>Select Library, TV Show, Episode, and Subtitle Segment</h3>
+
+@if (isLoading)
+{
+    <div class="text-center">
+        <div class="spinner-border" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+    </div>
+}
+else
+{
+    <div class="form-group">
+        <label for="library">Library: </label>
+        <select class="form-control" id="library" value="@selectedLibraryKey" @onchange="HandleLibraryChange">
+            <option value="">Select a library</option>
+            @if(libraries is not null)
+            {
+            @foreach (var library in libraries)
+            {
+                <option value="@library.Id">@library.Title</option>
+            }
+            }
+        </select>
+    </div>
+
+    @if (shows != null && shows.Any() && isShowStructure)
+    {
+        <div class="form-group">
+            <label for="show">TV Show: </label>
+            <select class="form-control" id="show" value="@selectedShowKey" @onchange="HandleShowChange">
+                <option value="">Select a TV show</option>
+                @foreach (var show in shows)
+                {
+                    <option value="@show.Id">@show.Title</option>
+                }
+            </select>
+        </div>
+    }
+
+    @if (episodes != null && episodes.Any() && episodes.All(x => !x.IsMovie))
+    {
+        <div class="form-group">
+            <label for="episode">Episode: </label>
+            <select class="form-control" id="episode" value="@selectedEpisode" @onchange="HandleEpisodeChange">
+                <option value="">Select an episode</option>
+                @foreach (var episode in episodes)
+                {
+                    <option value="@episode.Id">@episode.Title</option>
+                }
+            </select>
+        </div>
+    }
+    else if (episodes != null && episodes.Any() && episodes.All(x => x.IsMovie))
+    {
+        <div class="form-group">
+            <label for="episode">Movie: </label>
+            <select class="form-control" id="episode" value="@selectedEpisode" @onchange="HandleEpisodeChange">
+                <option value="">Select a Movie</option>
+                @foreach (var episode in episodes)
+                {
+                    <option value="@episode.Id">@episode.Title</option>
+                }
+            </select>
+        </div>
+    }
+
+    @if (selectedEpisode != null && subtitles != null && subtitles.Any())
+{
+    <div class="form-group">
+        <label for="startSubtitle">Start Subtitle: </label>
+        <select class="form-control" id="startSubtitle" @onchange="HandleStartSubtitleChange">
+            <option value="">Select a start subtitle</option>
+            @foreach (var subtitle in subtitles)
+            {
+                <option value="@subtitle.StartTime">@subtitle.ToString()</option>
+            }
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="endSubtitle">End Subtitle: </label>
+        <select class="form-control" id="endSubtitle" @onchange="HandleEndSubtitleChange">
+            <option value="">Select an end subtitle</option>
+            @foreach (var subtitle in subtitles)
+            {
+                <option value="@subtitle.EndTime">@subtitle.ToString()</option>
+            }
+        </select>
+    </div>
+
+    <!-- Timeline for visualizing subtitles within the movie -->
+    @if (selectedStartSubtitleTime > 0 && selectedEndSubtitleTime > 0 && !string.IsNullOrEmpty(selectedEpisode))
+    {
+        <div class="timeline-container">
+            <h5>Subtitle Timeline:</h5>
+                <div class="progress bg-primary">
+                    <div class="progress-bar bg-primary" role="progressbar"
+                         style="width: @((selectedStartSubtitleTime / 1000.0 / totalDuration.TotalSeconds) * 100)%"
+                         aria-valuenow="@(selectedStartSubtitleTime / 1000.0)" aria-valuemin="0" aria-valuemax="@totalDuration.TotalSeconds">
+                    </div>
+                    <div class="progress-bar bg-warning" role="progressbar"
+                         style="width: @(((selectedEndSubtitleTime - selectedStartSubtitleTime) / 1000.0 / totalDuration.TotalSeconds) * 100)%"
+                         aria-valuenow="@((selectedEndSubtitleTime - selectedStartSubtitleTime) / 1000.0)" aria-valuemin="@(selectedStartSubtitleTime / 1000.0)" aria-valuemax="@totalDuration.TotalSeconds">
+                    </div>
+                </div>
+        </div>
+            <div>
+                <label for="startSubtitleTime">Start Subtitle Time (ms):</label>
+                <input type="text" id="startSubtitleTime" value="@startSubtitleTimeString" @onchange="HandleStartSubtitleTimeChange" class="form-control" />
+
+                <label for="endSubtitleTime">End Subtitle Time (ms):</label>
+                <input type="text" id="endSubtitleTime" value="@endSubtitleTimeString" @onchange="HandleEndSubtitleTimeChange" class="form-control" />
+            </div>
+            <button class="btn btn-primary mt-3" @onclick="CreateGif" disabled="@isCreatingGif">Create GIF</button>
+    }
+}
+
+    @if (!string.IsNullOrEmpty(gifPath))
+    {
+        <div>
+            <h3>Generated GIF:</h3>
+            <img src="@gifPath" class="img-fluid" alt="Generated GIF" />
+        </div>
+    }
+    else if (isCreatingGif)
+    {
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="sr-only">Creating GIF...</span>
+            </div>
+        </div>
+    }    
+}
+
+
+@code {
+    private string? selectedLibraryKey;
+    private string? selectedShowKey;
+    private string? selectedEpisode;
+    private List<Library>? libraries;
+    private List<Episode>? shows;
+    private List<Episode>? episodes;
+    private bool isLoading = true;
+    private bool isShowStructure = true; // Add this flag
+    private List<SubtitleItem>? subtitles;
+    private string? gifPath; // Variable to store the path of the generated GIF
+    private bool isCreatingGif = false;
+    private string? errorMessage;
+    private TimeSpan totalDuration;
+    float totalDurationInSeconds;
+
+    private string startSubtitleTimeString
+    {
+        get => TimeSpan.FromMilliseconds(selectedStartSubtitleTime).ToString(@"hh\:mm\:ss\:fff");
+        set
+        {
+            if (TimeSpan.TryParseExact(value, @"hh\:mm\:ss\:fff", null, out var time))
+            {
+                selectedStartSubtitleTime = (int)time.TotalMilliseconds;
+            }
+        }
+    }
+
+    private string endSubtitleTimeString
+    {
+        get => TimeSpan.FromMilliseconds(selectedEndSubtitleTime).ToString(@"hh\:mm\:ss\:fff");
+        set
+        {
+            if (TimeSpan.TryParseExact(value, @"hh\:mm\:ss\:fff", null, out var time))
+            {
+                selectedEndSubtitleTime = (int)time.TotalMilliseconds;
+            }
+        }
+    }
+    private int selectedStartSubtitleTime;
+    private int selectedEndSubtitleTime;
+
+    // Properties for display purposes (formatted as TimeSpan)
+    private string startSubtitleTimeDisplay
+    {
+        get => TimeSpan.FromMilliseconds(selectedStartSubtitleTime).ToString(@"hh\:mm\:ss\:fff");
+        set
+        {
+            if (TimeSpan.TryParse(value, out var time))
+            {
+                selectedStartSubtitleTime = (int)time.TotalMilliseconds;
+            }
+        }
+    }
+
+    private string endSubtitleTimeDisplay
+    {
+        get => TimeSpan.FromMilliseconds(selectedEndSubtitleTime).ToString(@"hh\:mm\:ss\:fff");
+        set
+        {
+            if (TimeSpan.TryParse(value, out var time))
+            {
+                selectedEndSubtitleTime = (int)time.TotalMilliseconds;
+            }
+        }
+    }
+
+    private void HandleStartSubtitleTimeChange(ChangeEventArgs e)
+    {
+        if (TimeSpan.TryParseExact(e?.Value?.ToString(), @"hh\:mm\:ss\:fff", CultureInfo.InvariantCulture, out var time))
+        {
+            selectedStartSubtitleTime = (int)time.TotalMilliseconds;
+            startSubtitleTimeString = FormatTimeSpanAsString(time);
+        }
+        else
+        {
+            // Handle parse error if necessary
+        }
+    }
+
+    private void HandleEndSubtitleTimeChange(ChangeEventArgs e)
+    {
+        if (TimeSpan.TryParseExact(e?.Value?.ToString(), @"hh\:mm\:ss\:fff", CultureInfo.InvariantCulture, out var time))
+        {
+            selectedEndSubtitleTime = (int)time.TotalMilliseconds;
+            endSubtitleTimeString = FormatTimeSpanAsString(time);
+        }
+        else
+        {
+            // Handle parse error if necessary
+        }
+    }
+
+    // This method formats a TimeSpan to a string, including milliseconds.
+    private string FormatTimeSpanAsString(TimeSpan timeSpan)
+    {
+        return timeSpan.ToString(@"hh\:mm\:ss\:fff");
+    }
+
+    // This method parses a string to a TimeSpan. Make sure to include milliseconds in the parsing.
+    private TimeSpan ParseStringAsTimeSpan(string timeString)
+    {
+        return TimeSpan.TryParseExact(timeString, @"hh\:mm\:ss\:fff", CultureInfo.InvariantCulture, out var time)
+            ? time
+            : TimeSpan.Zero; // Return zero or handle the error as needed.
+    }
+
+    private void OnStartSubtitleTimeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var newTime))
+        {
+            selectedStartSubtitleTime = newTime;
+            // Perform further actions if needed, like updating the timeline
+        }
+    }
+
+    private void OnEndSubtitleTimeChanged(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var newTime))
+        {
+            selectedEndSubtitleTime = newTime;
+            // Perform further actions if needed, like updating the timeline
+        }
+    }
+
+    private async Task CreateGif()
+    {
+        // Check if all the necessary selections have been made before starting GIF creation
+        if (string.IsNullOrEmpty(selectedEpisode) || selectedStartSubtitleTime == 0 || selectedEndSubtitleTime == 0)
+        {
+            // Notify user to make the necessary selections
+            // You can set an error message here to show in the UI
+            errorMessage = "Please select all the necessary options before creating a GIF.";
+            StateHasChanged();
+            return;
+        }
+
+        // Indicate that the GIF creation process is starting
+        isCreatingGif = true;
+        StateHasChanged();
+
+        try
+        {
+            // Call the method to create a GIF from the selected episode and subtitle timings
+            gifPath = await PlexService.CreateGifFromSubtitlesAsync(selectedEpisode, selectedStartSubtitleTime, selectedEndSubtitleTime);
+        }
+        finally
+        {
+            // GIF creation is complete, update the UI
+            isCreatingGif = false;
+            StateHasChanged();
+        }
+
+        // After GIF creation, check if the path is not null and notify the UI to update
+        if (!string.IsNullOrEmpty(gifPath))
+        {
+            StateHasChanged(); // If there's a new GIF, the UI needs to update to show it
+        }
+    }
+
+    private void HandleStartSubtitleChange(ChangeEventArgs e)
+    {
+        if (e?.Value != null && int.TryParse(e.Value.ToString(), out var result))
+        {
+            selectedStartSubtitleTime = result;
+        }
+        else
+        {
+            _logger.LogWarning("HandleStartSubtitleChange received a null or invalid ChangeEventArgs.");
+            // Handle the case where e.Value is null or not a valid integer string.
+            // For example, you might want to set selectedStartSubtitleTime to a default value or log a warning.
+        }
+    }
+
+    private void HandleEndSubtitleChange(ChangeEventArgs e)
+    {
+        if (e?.Value != null && int.TryParse(e.Value.ToString(), out var result))
+        {
+            selectedEndSubtitleTime = result;
+        }
+        else
+        {
+            _logger.LogWarning("HandleEndSubtitleChange received a null or invalid ChangeEventArgs.");
+            // Handle the case where e.Value is null or not a valid integer string.
+            // For example, you might want to set selectedStartSubtitleTime to a default value or log a warning.
+        }
+    }
+
+    private async Task OnLibraryChange(ChangeEventArgs e)
+    {
+        // Check if the event argument and its value are not null
+        if (e?.Value != null)
+        {
+            selectedLibraryKey = e.Value.ToString();
+        }
+        else
+        {
+            _logger.LogWarning("OnLibraryChange received a null or invalid ChangeEventArgs.");
+            // Set selectedLibraryKey to an empty string or a default value if null or invalid.
+            selectedLibraryKey = string.Empty;
+            // Optionally, you can update the UI or take other actions to notify the user.
+        }
+
+        // Proceed only if selectedLibraryKey is not empty to avoid errors in the GetShowsAsync call.
+        if (!string.IsNullOrEmpty(selectedLibraryKey))
+        {
+            var fetchedItems = await PlexService.GetShowsAsync(selectedLibraryKey);
+
+            // Determine whether fetched items are shows or episodes
+            if (fetchedItems.Any() && fetchedItems.All(item => IsShowItem(item)))
+            {
+                shows = fetchedItems;
+                isShowStructure = true;
+                episodes = null; // Clear episodes as we're dealing with shows now
+            }
+            else
+            {
+                episodes = fetchedItems; // Directly set episodes if no shows are found
+                isShowStructure = false; // No show structure, we have a flat structure
+            }
+        }
+        else
+        {
+            // Handle the case where selectedLibraryKey is empty or invalid.
+            // You may want to log this event or notify the user.
+            _logger.LogWarning("Selected library key is empty or invalid.");
+        }
+
+        selectedShowKey = null; // Reset show selection
+        StateHasChanged();
+    }
+
+    // Utility method to determine if an item represents a show (you might need to adjust the logic based on your data structure)
+    private bool IsShowItem(Episode item)
+    {
+        // Your logic to determine if the item is a show
+        // For now, we assume all fetched items in this context are shows
+        // You might need additional metadata to make this decision
+        return true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeSettingsAndLibraries();
+        }
+    }
+
+    private async Task InitializeSettingsAndLibraries()
+    {
+        var baseUriResult = await ProtectedLocalStorage.GetAsync<string>("PlexBaseUri");
+        var tokenResult = await ProtectedLocalStorage.GetAsync<string>("PlexToken");
+
+        // Check both baseUriResult and tokenResult for success and null or whitespace values
+        if (!baseUriResult.Success || string.IsNullOrWhiteSpace(baseUriResult.Value) ||
+            !tokenResult.Success || string.IsNullOrWhiteSpace(tokenResult.Value))
+        {
+            // Log the error or handle it as needed
+            _logger.LogWarning("Base URI or token is missing in local storage. Redirecting to settings.");
+            NavigationManager.NavigateTo("/settings");
+            return;
+        }
+
+        // At this point, baseUriResult.Value and tokenResult.Value are confirmed to be not null or whitespace
+        // Safe to use them for setting configuration
+        PlexService.SetConfiguration(baseUriResult.Value!, tokenResult.Value!);
+        libraries = await PlexService.GetLibrariesAsync();
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task HandleLibraryChange(ChangeEventArgs e)
+    {
+        // Set selectedLibraryKey to e.Value or an empty string if e.Value is null
+        selectedLibraryKey = e?.Value?.ToString() ?? string.Empty;
+
+        // Now selectedLibraryKey is guaranteed to be non-null, though it could be empty
+        shows = await PlexService.GetShowsAsync(selectedLibraryKey);
+
+        // Handle the rest of your logic
+        if (shows == null || !shows.Any())
+        {
+            // Log warning or handle accordingly
+            shows = new List<Episode>();
+        }
+        episodes = null; // Clear episodes when changing libraries
+        selectedEpisode = null; // Clear selected episode when changing libraries
+        selectedShowKey = null;
+        if (shows.Any(x => x.IsMovie))
+        {
+            episodes = shows;
+            shows = new List<Episode>(); // Reset shows if they are movies
+        }
+        StateHasChanged();
+    }
+
+
+    private async Task HandleShowChange(ChangeEventArgs e)
+    {
+        // Ensure e.Value is not null before using it.
+        if (e?.Value != null)
+        {
+            selectedShowKey = e.Value.ToString();
+            // Proceed to call GetEpisodesAsync only if selectedShowKey is not null or empty.
+            if (!string.IsNullOrWhiteSpace(selectedShowKey))
+            {
+                episodes = await PlexService.GetEpisodesAsync(selectedShowKey, false);
+            }
+            else
+            {
+                _logger.LogWarning("selectedShowKey is null or whitespace.");
+                // Handle the case where selectedShowKey is null or whitespace
+                episodes = new List<Episode>(); // Assign an empty list or appropriate default value
+            }
+        }
+        else
+        {
+            _logger.LogWarning("HandleShowChange received a null ChangeEventArgs.");
+            // Handle the case where e.Value is null
+            // For example, you might want to clear the episodes or set them to a default state
+            episodes = new List<Episode>(); // Assign an empty list or appropriate default value
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task HandleEpisodeChange(ChangeEventArgs e)
+    {
+        if (e?.Value != null)
+        {
+            selectedEpisode = e.Value.ToString();
+        }
+        else
+        {
+            _logger.LogWarning("HandleEpisodeChange received a null or invalid ChangeEventArgs.");
+            // Handle the case appropriately, possibly setting selectedEpisode to a default or empty value
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(selectedEpisode))
+        {
+            var subtitle = await PlexService.GetEnglishSubtitleAsync(selectedEpisode);
+            if (subtitle?.Key != null)
+            {
+                subtitles = await PlexService.GetActualSubtitlesAsync(selectedEpisode, subtitle.Key);
+                totalDuration = await PlexService.GetEpisodeDurationAsync(selectedEpisode);
+                totalDurationInSeconds = (float)totalDuration.TotalSeconds;
+
+                _logger.LogInformation($"Fetched subtitles for episode {selectedEpisode}");
+                _logger.LogInformation($"Fetched {subtitles.Count} subtitles for episode {selectedEpisode}");
+            }
+            else
+            {
+                _logger.LogWarning("No valid subtitle key found.");
+                // Handle the case where the subtitle or its key is null.
+                // You might want to set subtitles to an empty list or a default state
+                subtitles = new List<SubtitlesParser.Classes.SubtitleItem>();
+            }
+
+            StateHasChanged();
+        }
+        else
+        {
+            _logger.LogWarning("Selected episode is null or empty.");
+            // Handle the case where the selectedEpisode is null or empty.
+            // This might include setting subtitles to an empty list or another default state
+        }
+    }
+}

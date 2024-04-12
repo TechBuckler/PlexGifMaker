@@ -1,0 +1,326 @@
+﻿@page "/settings"
+@using PlexGifMaker.Data
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@using System.Text.Json;
+@using System.Xml.Linq;
+@using Microsoft.AspNetCore.WebUtilities;
+@inject NavigationManager NavigationManager
+@inject ProtectedLocalStorage ProtectedLocalStorage
+@inject IServiceProvider ServiceProvider
+@inject ILogger<Settings> Logger
+@if (rendered)
+{
+    <h3>Enter your Plex Server Details</h3>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger">
+            @errorMessage
+        </div>
+    }
+    @if (string.IsNullOrEmpty(userToken) || string.IsNullOrEmpty(userBaseUri))
+    {
+        <div>
+            <label for="baseUri">Plex Server Base URI:</label>
+            <input type="text" class="form-control" id="baseUri" @bind="userBaseUri" placeholder="e.g., http://your-plex-server:32400" />
+        </div>
+        <button class="btn btn-primary mt-2" @onclick="GeneratePinAsync">Authenticate with Plex</button>
+    }
+    else
+    {
+        <div>
+            <label for="baseUriDisplay">Plex Server Base URI:</label>
+            <input type="text" class="form-control" id="baseUriDisplay" value="@userBaseUri" readonly />
+        </div>
+        <div>
+            <label for="tokenDisplay">Plex Token:</label>
+            <input type="text" class="form-control" id="tokenDisplay" value="@userToken" readonly />
+        </div>
+    }
+}
+
+@code {
+    private string? userBaseUri;
+    private string? userToken;
+    private string? errorMessage;
+    private string? clientIdentifier;
+    private bool rendered = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await CheckLocalStorageForData();
+            rendered = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task GeneratePinAndNavigateAsync()
+    {
+        var encodedAppName = Uri.EscapeDataString("PlexGifMaker");
+        using var client = new HttpClient();
+
+        client.DefaultRequestHeaders.Add("X-Plex-Client-Identifier", clientIdentifier);
+        await SaveUserSettings();
+        var response = await client.PostAsync(
+            "https://plex.tv/api/v2/pins?strong=true" +
+            $"&X-Plex-Product={encodedAppName}" +
+            $"&X-Plex-Client-Identifier={clientIdentifier}", null);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorContent = await response.Content.ReadAsStringAsync();
+            Logger.LogError("Error from Plex API: {StatusCode} - {Content}", response.StatusCode, errorContent);
+            errorMessage = "Failed to authenticate with Plex. Please try again.";
+            StateHasChanged();
+            return;
+        }
+
+        var content = await response.Content.ReadAsStringAsync();
+
+        try
+        {
+            var doc = XDocument.Parse(content);
+            var pinElement = doc.Element("pin");
+            if (pinElement != null)
+            {
+                var pinId = (string?)pinElement?.Attribute("id");
+                var pinCode = (string?)pinElement?.Attribute("code");
+
+                if (!string.IsNullOrEmpty(pinId) && !string.IsNullOrEmpty(pinCode))
+                {
+                    await ProtectedLocalStorage.SetAsync("PlexPinId", pinId);
+                    NavigateToAuthAppUrl(pinCode);
+                }
+            }
+            else
+            {
+                Logger.LogWarning("Pin element not found or XML is malformed.");
+                errorMessage = "Failed to process the response from Plex.";
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "XML parsing error");
+            errorMessage = "Failed to parse the response from Plex.";
+            StateHasChanged();
+        }
+    }
+
+    private async Task CheckLocalStorageForData()
+    {
+        var clientIdentifierResult = await ProtectedLocalStorage.GetAsync<string>("ClientIdentifier");
+        if (!clientIdentifierResult.Success || string.IsNullOrWhiteSpace(clientIdentifierResult.Value))
+        {
+            // No existing client identifier found, so generate a new one
+            clientIdentifier = Guid.NewGuid().ToString();
+            await ProtectedLocalStorage.SetAsync("ClientIdentifier", clientIdentifier);
+            StateHasChanged(); // This will cause the UI to update with the new client identifier
+        }
+        else
+        {
+            // Use the existing client identifier
+            clientIdentifier = clientIdentifierResult.Value;
+        }
+        var baseUriResult = await ProtectedLocalStorage.GetAsync<string>("PlexBaseUri");
+        if (baseUriResult.Success)
+        {
+            userBaseUri = baseUriResult.Value;
+        }
+
+        var tokenResult = await ProtectedLocalStorage.GetAsync<string>("PlexToken");
+        if (tokenResult.Success)
+        {
+            userToken = tokenResult.Value;
+        }
+
+        StateHasChanged();
+
+        // If there's no token, proceed to check PIN status
+        if (string.IsNullOrEmpty(userToken))
+        {
+            var pinIdResult = await ProtectedLocalStorage.GetAsync<string>("PlexPinId");
+            if (pinIdResult.Success && !string.IsNullOrWhiteSpace(pinIdResult.Value))
+            {
+                await CheckPinStatusAsync();
+            }
+        }
+    }
+
+    private async Task GeneratePinAsync()
+    {
+        // Clear any existing error message
+        errorMessage = null;
+        StateHasChanged();
+        await GeneratePinAndNavigateAsync();
+    }
+
+    private async Task CheckPinStatusAsync()
+    {
+        var tokenResult = await ProtectedLocalStorage.GetAsync<string>("PlexToken");
+        if (tokenResult.Success && !string.IsNullOrWhiteSpace(tokenResult.Value))
+        {
+            userToken = tokenResult.Value;
+            var plexService = ServiceProvider.GetService<PlexService>();
+            if (plexService != null && !string.IsNullOrWhiteSpace(userBaseUri))
+            {
+                plexService.SetConfiguration(userBaseUri, userToken);
+                return;
+            }
+        }
+
+        var pinIdResult = await ProtectedLocalStorage.GetAsync<string>("PlexPinId");
+        if (pinIdResult.Success && !string.IsNullOrWhiteSpace(pinIdResult.Value))
+        {
+            using var client = new HttpClient();
+            string url = $"https://plex.tv/api/v2/pins/{pinIdResult.Value}?X-Plex-Client-Identifier={clientIdentifier}";
+            var response = await client.GetAsync(url);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                try
+                {
+                    var doc = XDocument.Parse(content);
+                    var pinElement = doc.Element("pin");
+                    var authTokenAttribute = pinElement?.Attribute("authToken");
+
+                    if (authTokenAttribute != null && !string.IsNullOrWhiteSpace(authTokenAttribute.Value))
+                    {
+                        var authToken = authTokenAttribute.Value;
+                        await ProtectedLocalStorage.SetAsync("PlexToken", authToken);
+                        userToken = authToken;
+
+                        var plexService = ServiceProvider.GetService<PlexService>();
+                        if (plexService != null && !string.IsNullOrWhiteSpace(userBaseUri))
+                        {
+                            plexService.SetConfiguration(userBaseUri, authToken);
+                            NavigationManager.NavigateTo("/index");
+                        }
+                    }
+                    else
+                    {
+                        Logger.LogWarning("Auth token not found.");
+                        errorMessage = "Auth token not found.";
+                        StateHasChanged();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "XML parsing error");
+                    errorMessage = "Error parsing the XML response from Plex.";
+                    StateHasChanged();
+                }
+            }
+            else
+            {
+                Logger.LogError("Failed to check the status of the PIN with Plex. Status code: {StatusCode}", response.StatusCode);
+                errorMessage = $"Failed to check the status of the PIN with Plex. Status code: {response.StatusCode}";
+                StateHasChanged();
+            }
+        }
+        else
+        {
+            Logger.LogWarning("No PIN ID was found in local storage, which is required to check the PIN status.");
+            errorMessage = "No PIN ID was found in local storage, which is required to check the PIN status.";
+            StateHasChanged();
+        }
+    }
+
+    private async void NavigateToAuthAppUrl(string pinCode)
+    {
+        if (string.IsNullOrEmpty(pinCode) || string.IsNullOrEmpty(clientIdentifier))
+        {
+            Logger.LogError("Pin code or client identifier is missing.");
+            return;
+        }
+
+        await SaveUserSettings();
+        var encodedAppName = Uri.EscapeDataString("PlexGifMaker");
+        var authAppUrl =
+            $"https://app.plex.tv/auth#?clientID={Uri.EscapeDataString(clientIdentifier)}" +
+            $"&code={Uri.EscapeDataString(pinCode)}" +
+            $"&forwardUrl={Uri.EscapeDataString(NavigationManager.Uri)}" +
+            $"&context%5Bdevice%5D%5Bproduct%5D={encodedAppName}";
+
+        NavigationManager.NavigateTo(authAppUrl, true);
+    }
+
+    private async Task SaveUserSettings()
+    {
+        bool baseUriValid = ValidateBaseUri();
+        bool tokenValid = ValidateToken();
+
+        if (baseUriValid || tokenValid)
+        {
+            await SaveValidSettings();
+        }
+        else
+        {
+            errorMessage = "Please correct the errors and try again.";
+            StateHasChanged(); // Update the UI to show the error message
+        }
+    }
+
+    private bool ValidateBaseUri()
+    {
+        errorMessage = string.Empty;
+        if (!Uri.IsWellFormedUriString(userBaseUri, UriKind.Absolute))
+        {
+            errorMessage = "The provided Base URI is not valid.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool ValidateToken()
+    {
+        errorMessage = string.Empty;
+        if (string.IsNullOrWhiteSpace(userToken))
+        {
+            //errorMessage = "Token must not be empty.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task SaveValidSettings()
+    {
+        if (!string.IsNullOrWhiteSpace(userBaseUri))
+        {
+            await ProtectedLocalStorage.SetAsync("PlexBaseUri", userBaseUri);
+        }
+
+        if (!string.IsNullOrWhiteSpace(userToken))
+        {
+            await ProtectedLocalStorage.SetAsync("PlexToken", userToken);
+        }
+
+        var plexService = ServiceProvider.GetService<PlexService>();
+        if (plexService != null)
+        {
+            // Perform null checks before accessing userBaseUri and userToken
+            if (userBaseUri != null && userToken != null)
+            {
+                plexService.SetConfiguration(userBaseUri, userToken);
+                NavigationManager.NavigateTo("/index");
+            }
+            else
+            {
+                //errorMessage = "Base URI or token is null.";
+                StateHasChanged(); // Update the UI to show the error message
+            }
+        }
+        else
+        {
+            errorMessage = "Plex service not found.";
+            StateHasChanged(); // Update the UI to show the error message
+        }
+    }
+
+
+}
