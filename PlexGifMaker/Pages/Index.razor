@@ -106,10 +106,9 @@ else
             }
         </select>
     </div>
-
-    <!-- Timeline for visualizing subtitles within the movie -->
-    @if (selectedStartSubtitleTime > 0 && selectedEndSubtitleTime > 0 && !string.IsNullOrEmpty(selectedEpisode))
+    @if ((selectedStartSubtitleTime > 0 && selectedEndSubtitleTime > 0 && !string.IsNullOrEmpty(selectedEpisode)) || fallbackToTimeOnly)
     {
+            <!-- Timeline for visualizing subtitles within the movie -->
         <div class="timeline-container">
             <h5>Subtitle Timeline:</h5>
                 <div class="progress bg-primary">
@@ -167,6 +166,7 @@ else
     private string? errorMessage;
     private TimeSpan totalDuration;
     float totalDurationInSeconds;
+    bool fallbackToTimeOnly = false;
 
     private string startSubtitleTimeString
     {
@@ -503,6 +503,15 @@ else
 
                 _logger.LogInformation($"Fetched subtitles for episode {selectedEpisode}");
                 _logger.LogInformation($"Fetched {subtitles.Count} subtitles for episode {selectedEpisode}");
+                if(subtitles.Count == 0)
+                {
+                    fallbackToTimeOnly = true;
+                    errorMessage = "No subtitles found for the selected episode. Please enter the start and end times manually.";
+                }
+                else
+                {
+                    fallbackToTimeOnly = false;
+                }
             }
             else
             {
