@@ -2,7 +2,9 @@
 using System.Diagnostics;
 using System.Text;
 using System.Xml;
+using System.Xml.Linq;
 using UtfUnknown;
+using static PlexGifMaker.Data.PlexService;
 namespace PlexGifMaker.Data
 {
     public class PlexService
@@ -517,6 +519,100 @@ namespace PlexGifMaker.Data
             }
 
             return TimeSpan.Zero;
+        }
+
+        public async Task<List<SubtitleItem>> FetchSubtitlesAsync(string? episodeId)
+        {
+            if (string.IsNullOrEmpty(episodeId))
+            {
+                _logger.LogError("Episode ID is null or empty.");
+                return new List<SubtitleItem>(); // Early exit with an empty list if no valid episode ID is provided
+            }
+            var client = _httpClientFactory.CreateClient();
+            var requestUri = $"{_baseUri}/library/metadata/{episodeId}/subtitles?language=en&hearingImpaired=0&forced=0&X-Plex-Token={_token}"; //GET request
+            try
+            {
+                var response = await client.GetAsync(requestUri);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var streamId = ExtractStreamIdFromXml(content);
+                    if (streamId == null)
+                    {
+                        _logger.LogWarning("No subtitles were found from OpenSubtitles for episode {EpisodeId}.", episodeId);
+                        return new List<SubtitleItem>();
+                    }
+                    else
+                    {
+                        var items = new List<SubtitleItem>();
+                        var requestSubUri = $"{_baseUri}/library/metadata/{episodeId}/subtitles?key=%2Flibrary%2Fstreams%2F{streamId}&codec=srt&language=eng&hearingImpaired=0&forced=0&providerTitle=OpenSubtitles&X-Plex-Token={_token}"; //PUT request
+                        var responseSub = await client.GetAsync(requestSubUri);
+                        if (responseSub.IsSuccessStatusCode)
+                        {
+                            var subtitle = await GetEnglishSubtitleAsync(episodeId);
+                            if (subtitle == null || string.IsNullOrEmpty(subtitle.Key))
+                            {
+                                _logger.LogWarning("No English subtitles found for episode {EpisodeId}.", episodeId);
+                                return new List<SubtitleItem>();
+                            }
+                            else
+                            {
+                                return await GetActualSubtitlesAsync(episodeId, subtitle.Key);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogError("Failed to fetch subtitles for episode {EpisodeId}. Status code: {StatusCode}", episodeId, responseSub.StatusCode);
+                            return new List<SubtitleItem>();
+                        }
+                    }
+                }
+                else
+                {
+                    _logger.LogError("Failed to fetch subtitles for episode {EpisodeId}. Status code: {StatusCode}", episodeId, response.StatusCode);
+                    return new List<SubtitleItem>();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("An error occurred while fetching subtitles for episode {EpisodeId}: {ErrorMessage}", episodeId, ex.Message);
+                return new List<SubtitleItem>();
+            }
+        }
+        public int? ExtractStreamIdFromXml(string xmlContent)
+        {
+            try
+            {
+                // Load the XML content into an XDocument
+                var document = XDocument.Parse(xmlContent);
+
+                // Retrieve the first <Stream> element
+                var firstStream = document.Descendants("Stream").FirstOrDefault();
+
+                // Get the 'sourceKey' attribute value
+                var sourceKey = firstStream?.Attribute("sourceKey")?.Value;
+
+                if (sourceKey != null)
+                {
+                    // Extract the number after "/library/streams/"
+                    var parts = sourceKey.Split('/');
+                    if (parts.Length > 2)
+                    {
+                        // The ID is expected to be the last part of the 'sourceKey'
+                        if (int.TryParse(parts.Last(), out int streamId))
+                        {
+                            return streamId; // Return the extracted ID
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log or handle the exception as needed
+                Console.WriteLine($"An error occurred: {ex.Message}");
+            }
+            return null; // Return -1 or any other indicator for failure or non-existence
         }
     }
     public class Library

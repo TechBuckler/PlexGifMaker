@@ -10,12 +10,27 @@
 @using SubtitlesParser.Classes;
 @using System.Globalization
 
+@if (!string.IsNullOrEmpty(successMessage))
+{
+    
+    <div class="alert alert-success">
+        @successMessage
+    </div>
+}
 @if (!string.IsNullOrEmpty(errorMessage))
 {
     <div class="alert alert-danger">
         @errorMessage
     </div>
 }
+@if (!string.IsNullOrEmpty(selectedEpisode) && (subtitles == null || !subtitles.Any()))
+{
+    <div class="alert alert-warning">
+        No subtitles found for the selected episode.
+        <button class="btn btn-success mt-2" @onclick="DownloadSubtitles">Download Subtitles</button>
+    </div>
+}
+
 <h3>Select Library, TV Show, Episode, and Subtitle Segment</h3>
 
 @if (isLoading)
@@ -164,6 +179,7 @@ else
     private string? gifPath; // Variable to store the path of the generated GIF
     private bool isCreatingGif = false;
     private string? errorMessage;
+    private string? successMessage;
     private TimeSpan totalDuration;
     float totalDurationInSeconds;
     bool fallbackToTimeOnly = false;
@@ -276,6 +292,37 @@ else
             // Perform further actions if needed, like updating the timeline
         }
     }
+
+    private async Task DownloadSubtitles()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Simulate fetching subtitles (or implement actual fetching logic here)
+            subtitles = await PlexService.FetchSubtitlesAsync(selectedEpisode);
+            if (subtitles == null || !subtitles.Any())
+            {
+                errorMessage = "Failed to download subtitles. Please try again.";
+            }
+            else
+            {
+                successMessage = "Subtitles downloaded successfully.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error downloading subtitles: {ex.Message}");
+            errorMessage = "An error occurred while downloading subtitles.";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
 
     private async Task CreateGif()
     {
