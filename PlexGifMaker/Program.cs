@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PlexGifMaker.Data;
+using PlexGifMaker.Shared;
 using System.Reflection;
 
 var builder = WebApplication.CreateBuilder(args);

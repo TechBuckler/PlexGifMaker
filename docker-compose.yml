@@ -1,10 +1,8 @@
-version: '3.8'
-
 services:
   plexgifmaker:
     build:
-      context: PlexGifMaker/
-      dockerfile: Dockerfile
+      context: .  # This should be the root directory containing the 'PlexGifMaker' folder
+      dockerfile: PlexGifMaker/Dockerfile
     image: plexgifmaker:latest
     ports:
       - "9000:80"
