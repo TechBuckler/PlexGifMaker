@@ -9,8 +9,13 @@ services:
       - "443:443"
     volumes:
       - plexgifmaker_keys:/usr/shared/plexgifmaker_keys
-      - devcerts:/usr/shared/devcerts
+      #- ./certs:/https
     restart: unless-stopped
+    environment:
+      - ASPNETCORE_URLS=https://+;http://+
+      - ASPNETCORE_HTTPS_PORT=443
+      - ASPNETCORE_Kestrel__Certificates__Default__Password=abcde
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/aspnetapp.pfx
 
 volumes:
   plexgifmaker_keys:
