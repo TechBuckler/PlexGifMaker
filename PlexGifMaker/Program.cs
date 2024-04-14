@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using PlexGifMaker.Data;
 using PlexGifMaker.Shared;
 using System.Reflection;
+using static Microsoft.AspNetCore.Http.StatusCodes;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +24,12 @@ builder.Services.AddTransient<PlexService>();
 builder.Logging.ClearProviders();
 builder.Logging.AddLog4Net();
 builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(@"/usr/shared/plexgifmaker_keys"));
+builder.Services.AddHttpsRedirection(options =>
+{
+    options.RedirectStatusCode = Status307TemporaryRedirect;
+    options.HttpsPort = 443;
+});
+
 var logRepository = LogManager.GetRepository(Assembly.GetEntryAssembly());
 XmlConfigurator.Configure(logRepository, new FileInfo("log4net.config"));
 
