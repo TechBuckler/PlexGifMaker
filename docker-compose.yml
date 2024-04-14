@@ -6,16 +6,12 @@ services:
     image: plexgifmaker:latest
     ports:
       - "9000:80"
-      - "443:443"
     volumes:
       - plexgifmaker_keys:/usr/shared/plexgifmaker_keys
       #- ./certs:/https
     restart: unless-stopped
     environment:
-      - ASPNETCORE_URLS=https://+;http://+
-      - ASPNETCORE_HTTPS_PORT=443
-      - ASPNETCORE_Kestrel__Certificates__Default__Password=abcde
-      - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/aspnetapp.pfx
+      - ASPNETCORE_URLS=http://+
 
 volumes:
   plexgifmaker_keys:

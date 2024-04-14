@@ -2,12 +2,6 @@
 FROM mcr.microsoft.com/dotnet/aspnet:6.0 AS base
 WORKDIR /app
 EXPOSE 80
-EXPOSE 443
-COPY ["aspnetapp.pfx", "/https/"]
-RUN chmod 755 /https/aspnetapp.pfx
-
-# Print out the contents of the /https directory
-RUN ls -al /https/
 
 # Install FFmpeg in the base image
 RUN apt-get update -y && \
@@ -33,7 +27,5 @@ FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 
-# Print the contents again to confirm it's correct at runtime
-RUN ls -al /https/
 
 ENTRYPOINT ["dotnet", "PlexGifMaker.dll"]

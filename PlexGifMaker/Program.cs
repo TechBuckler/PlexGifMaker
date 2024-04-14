@@ -28,20 +28,20 @@ builder.Services.AddTransient<PlexService>();
 builder.Services.AddDataProtection().PersistKeysToFileSystem(new DirectoryInfo(@"/usr/shared/plexgifmaker_keys"));
 
 // Configure HTTPS redirection
-builder.Services.AddHttpsRedirection(options =>
-{
-    options.RedirectStatusCode = StatusCodes.Status307TemporaryRedirect;
-    options.HttpsPort = 443;
-});
+//builder.Services.AddHttpsRedirection(options =>
+//{
+//    options.RedirectStatusCode = StatusCodes.Status307TemporaryRedirect;
+//    options.HttpsPort = 443;
+//});
 
 // Configure Kestrel and HTTPS
-builder.WebHost.UseKestrel(options =>
-{
-    options.Listen(IPAddress.Any, 443, listenOptions =>
-    {
-        listenOptions.UseHttps("/https/aspnetapp.pfx", "abcde"); 
-    });
-});
+//builder.WebHost.UseKestrel(options =>
+//{
+//    options.Listen(IPAddress.Any, 443, listenOptions =>
+//    {
+//        listenOptions.UseHttps("/https/aspnetapp.pfx", "abcde"); 
+//    });
+//});
 
 var app = builder.Build();
 
@@ -54,14 +54,14 @@ if (app.Environment.IsDevelopment())
 else
 {
     app.UseExceptionHandler("/Error");
-    app.UseHsts();
+    //app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+//app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
-app.UseAuthentication();
-app.UseAuthorization();
+//app.UseAuthentication();
+//app.UseAuthorization();
 
 app.MapControllers();
 app.MapBlazorHub();
