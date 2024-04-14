@@ -547,7 +547,7 @@ namespace PlexGifMaker.Data
                     {
                         var items = new List<SubtitleItem>();
                         var requestSubUri = $"{_baseUri}/library/metadata/{episodeId}/subtitles?key=%2Flibrary%2Fstreams%2F{streamId}&codec=srt&language=eng&hearingImpaired=0&forced=0&providerTitle=OpenSubtitles&X-Plex-Token={_token}"; //PUT request
-                        var responseSub = await client.GetAsync(requestSubUri);
+                        var responseSub = await client.PutAsync(requestSubUri, null);
                         if (responseSub.IsSuccessStatusCode)
                         {
                             var subtitle = await GetEnglishSubtitleAsync(episodeId);

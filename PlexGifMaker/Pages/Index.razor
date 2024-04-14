@@ -23,7 +23,7 @@
         @errorMessage
     </div>
 }
-@if (!string.IsNullOrEmpty(selectedEpisode) && (subtitles == null || !subtitles.Any()))
+@if (!string.IsNullOrEmpty(selectedEpisode) && !subsFound)
 {
     <div class="alert alert-warning">
         No subtitles found for the selected episode.
@@ -99,7 +99,7 @@ else
     }
 
     @if (selectedEpisode != null && subtitles != null && subtitles.Any())
-{
+    {
     <div class="form-group">
         <label for="startSubtitle">Start Subtitle: </label>
         <select class="form-control" id="startSubtitle" @onchange="HandleStartSubtitleChange">
@@ -121,7 +121,8 @@ else
             }
         </select>
     </div>
-    @if ((selectedStartSubtitleTime > 0 && selectedEndSubtitleTime > 0 && !string.IsNullOrEmpty(selectedEpisode)) || fallbackToTimeOnly)
+    }
+    @if ((selectedStartSubtitleTime > 0 && selectedEndSubtitleTime > 0 && !string.IsNullOrEmpty(selectedEpisode)) || !subsFound)
     {
             <!-- Timeline for visualizing subtitles within the movie -->
         <div class="timeline-container">
@@ -146,7 +147,7 @@ else
             </div>
             <button class="btn btn-primary mt-3" @onclick="CreateGif" disabled="@isCreatingGif">Create GIF</button>
     }
-}
+
 
     @if (!string.IsNullOrEmpty(gifPath))
     {
@@ -182,7 +183,7 @@ else
     private string? successMessage;
     private TimeSpan totalDuration;
     float totalDurationInSeconds;
-    bool fallbackToTimeOnly = false;
+    private bool subsFound = true; //default to true so it doesn't show the warning message if subs are not found
 
     private string startSubtitleTimeString
     {
@@ -300,7 +301,6 @@ else
 
         try
         {
-            // Simulate fetching subtitles (or implement actual fetching logic here)
             subtitles = await PlexService.FetchSubtitlesAsync(selectedEpisode);
             if (subtitles == null || !subtitles.Any())
             {
@@ -327,7 +327,7 @@ else
     private async Task CreateGif()
     {
         // Check if all the necessary selections have been made before starting GIF creation
-        if (string.IsNullOrEmpty(selectedEpisode) || selectedStartSubtitleTime == 0 || selectedEndSubtitleTime == 0)
+        if (string.IsNullOrEmpty(selectedEpisode) || selectedEndSubtitleTime == 0)
         {
             // Notify user to make the necessary selections
             // You can set an error message here to show in the UI
@@ -552,12 +552,12 @@ else
                 _logger.LogInformation($"Fetched {subtitles.Count} subtitles for episode {selectedEpisode}");
                 if(subtitles.Count == 0)
                 {
-                    fallbackToTimeOnly = true;
+                    subsFound = false;
                     errorMessage = "No subtitles found for the selected episode. Please enter the start and end times manually.";
                 }
                 else
                 {
-                    fallbackToTimeOnly = false;
+                    subsFound = true;
                 }
             }
             else
