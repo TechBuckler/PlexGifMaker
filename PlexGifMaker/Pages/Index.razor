@@ -83,6 +83,7 @@ else
                     <option value="@episode.Id">@episode.Title</option>
                 }
             </select>
+            <button class="btn btn-success mt-2" @onclick="DownloadSubtitles">Download Subtitles</button>
         </div>
     }
     else if (episodes != null && episodes.Any() && episodes.All(x => x.IsMovie))
@@ -541,7 +542,6 @@ else
     }
     public async Task setSubtitles()
     {
-        var subtitle = subtitleOptions.FirstOrDefault();
         if (!string.IsNullOrEmpty(selectedEpisode))
         {
             subtitleOptions = await PlexService.GetSubtitleOptionsAsync(selectedEpisode);
