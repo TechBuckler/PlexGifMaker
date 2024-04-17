@@ -132,7 +132,7 @@ else
         </select>
     </div>
     }
-    @if ((selectedStartSubtitleTime > 0 && selectedEndSubtitleTime > 0 && !string.IsNullOrEmpty(selectedEpisode)) || !subsFound)
+    @if (!string.IsNullOrEmpty(selectedEpisode) || !subsFound)
     {
             <!-- Timeline for visualizing subtitles within the movie -->
         <div class="timeline-container">
