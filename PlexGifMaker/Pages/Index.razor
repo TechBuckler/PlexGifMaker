@@ -11,13 +11,6 @@
 @using System.Globalization
 @using System.Web
 
-@if (!string.IsNullOrEmpty(successMessage))
-{
-    
-    <div class="alert alert-success">
-        @successMessage
-    </div>
-}
 @if (!string.IsNullOrEmpty(errorMessage))
 {
     <div class="alert alert-danger">
@@ -101,7 +94,7 @@ else
             <option value="">Select a subtitle</option>
             @foreach (var subtitle in subtitleOptions)
             {
-                <option value="@subtitle.Key">@subtitle.Language - @subtitle.DisplayTitle</option>
+                <option value="@subtitle?.Key">@subtitle?.Language - @subtitle?.DisplayTitle</option>
             }
             </select>
             </div>
@@ -189,11 +182,10 @@ else
     private string? gifPath; // Variable to store the path of the generated GIF
     private bool isCreatingGif = false;
     private string? errorMessage;
-    private string? successMessage;
     private TimeSpan totalDuration;
     float totalDurationInSeconds;
     private bool subsFound = true; //default to true so it doesn't show the warning message if subs are not found
-    private List<Subtitle>? subtitleOptions;
+    private List<Subtitle?>? subtitleOptions;
 
     private string startSubtitleTimeString
     {
@@ -483,7 +475,7 @@ else
     private async Task HandleShowChange(ChangeEventArgs e)
     {
         episodes = null; // Clear episodes when changing shows
-        // Ensure e.Value is not null before using it.
+                         // Ensure e.Value is not null before using it.
         if (e?.Value != null)
         {
             selectedShowKey = e.Value.ToString();
@@ -524,7 +516,14 @@ else
         subtitles = null;
         selectedSubtitleOptionKey = null;
         subtitleOptions = null;
-        subtitleOptions = await PlexService.GetSubtitleOptionsAsync(selectedEpisode);
+        if (selectedEpisode != null)
+        {
+            subtitleOptions = await PlexService.GetSubtitleOptionsAsync(selectedEpisode);
+        }
+        else
+        {
+            _logger.LogWarning("Selected episode is null or empty.");
+        }
     }
     public async Task setSubtitles()
     {
@@ -539,8 +538,8 @@ else
             totalDurationInSeconds = (float)totalDuration.TotalSeconds;
 
             _logger.LogInformation($"Fetched subtitles for episode {selectedEpisode}");
-            _logger.LogInformation($"Fetched {subtitles.Count} subtitles for episode {selectedEpisode}");
-            if (subtitles.Count == 0)
+            _logger.LogInformation($"Fetched {subtitles?.Count} subtitles for episode {selectedEpisode}");
+            if (subtitles?.Count == 0)
             {
                 subsFound = false;
                 errorMessage = "No subtitles found for the selected episode. Please enter the start and end times manually.";

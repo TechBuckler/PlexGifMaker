@@ -86,7 +86,7 @@ namespace PlexGifMaker.Data
 
             return episodes;
         }
-        public string ExtractMediaPartInfo(string xmlContent)
+        public string? ExtractMediaPartInfo(string xmlContent)
         {
             XDocument doc = XDocument.Parse(xmlContent);
             var videoNode = doc.Descendants("Video").FirstOrDefault();
@@ -95,7 +95,7 @@ namespace PlexGifMaker.Data
                 var partNode = videoNode.Descendants("Part").FirstOrDefault();
                 if (partNode != null)
                 {
-                    string container = partNode?.Attribute("container")?.Value;
+                    string? container = partNode?.Attribute("container")?.Value;
                     return container;
                 }
                 else
@@ -113,7 +113,7 @@ namespace PlexGifMaker.Data
         {
             var client = _httpClientFactory.CreateClient();
             var requestUri = $"{_baseUri}/library/metadata/{episodeId}?X-Plex-Token={_token}";
-            List<Subtitle?> subtitles = new List<Subtitle?>();
+            List<Subtitle?> subtitles = new();
             try
             {
                 var response = await client.GetAsync(requestUri);
@@ -121,7 +121,7 @@ namespace PlexGifMaker.Data
                 if (response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync();
-                    string part = ExtractMediaPartInfo(content);
+                    string? part = ExtractMediaPartInfo(content);
                     var doc = new XmlDocument();
                     doc.LoadXml(content);
 
