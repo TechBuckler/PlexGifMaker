@@ -158,7 +158,6 @@ else
             <button class="btn btn-primary mt-3" @onclick="CreateGif" disabled="@isCreatingGif">Create GIF</button>
     }
 
-
     @if (!string.IsNullOrEmpty(gifPath))
     {
         <div>
@@ -175,7 +174,6 @@ else
         </div>
     }    
 }
-
 
 @code {
     private string? selectedLibraryKey;

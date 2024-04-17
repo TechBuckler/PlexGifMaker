@@ -16,3 +16,4 @@ services:
 volumes:
   plexgifmaker_keys:
     name: plexgifmaker_keys
+    external: true
