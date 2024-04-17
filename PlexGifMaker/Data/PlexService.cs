@@ -5,7 +5,10 @@ using System.Text;
 using System.Xml;
 using System.Xml.Linq;
 using UtfUnknown;
+using System.IO;
 using static PlexGifMaker.Data.PlexService;
+using MediaInfo;
+using MediaInfo.Model;
 namespace PlexGifMaker.Data
 {
     public class PlexService
@@ -83,11 +86,34 @@ namespace PlexGifMaker.Data
 
             return episodes;
         }
+        public string ExtractMediaPartInfo(string xmlContent)
+        {
+            XDocument doc = XDocument.Parse(xmlContent);
+            var videoNode = doc.Descendants("Video").FirstOrDefault();
+            if (videoNode != null)
+            {
+                var partNode = videoNode.Descendants("Part").FirstOrDefault();
+                if (partNode != null)
+                {
+                    string container = partNode?.Attribute("container")?.Value;
+                    return container;
+                }
+                else
+                {
+                    _logger.LogInformation("No Part element found.");
+                }
+            }
+            else
+            {
+                _logger.LogInformation("No Video element found.");
+            }
+            return null;
+        }
         public async Task<List<Subtitle?>> GetSubtitleOptionsAsync(string episodeId)
         {
             var client = _httpClientFactory.CreateClient();
             var requestUri = $"{_baseUri}/library/metadata/{episodeId}?X-Plex-Token={_token}";
-
+            List<Subtitle?> subtitles = new List<Subtitle?>();
             try
             {
                 var response = await client.GetAsync(requestUri);
@@ -95,29 +121,35 @@ namespace PlexGifMaker.Data
                 if (response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync();
+                    string part = ExtractMediaPartInfo(content);
                     var doc = new XmlDocument();
                     doc.LoadXml(content);
 
                     var subtitleNodes = doc.SelectNodes("//Stream[@streamType='3']");
 
+                    if(part == "mkv")
+                    {
+                        var embeddedSubtitles = GetEmbeddedSubtitles($"{_baseUri}/library/metadata/{episodeId}/file?X-Plex-Token={_token}");
+                        foreach(var subtitle in embeddedSubtitles)
+                        {
+                            subtitles.Add(subtitle);
+                        }
+                    }
+
                     if (subtitleNodes != null)
                     {
-                        List<Subtitle?> subtitles = new List<Subtitle?>();
-                        foreach(XmlNode node in subtitleNodes)
+
+                        foreach (XmlNode node in subtitleNodes)
                         {
-                            if (!string.IsNullOrEmpty(node.Attributes?["key"]?.Value))
+                            var subtitle = new Subtitle
                             {
-                                var subtitle = new Subtitle
-                                {
-                                    Id = node.Attributes?["id"]?.Value ?? string.Empty,  
-                                    Language = node.Attributes?["language"]?.Value ?? "Unknown",
-                                    Key = node.Attributes?["key"]?.Value ?? string.Empty,
-                                    DisplayTitle = node.Attributes?["displayTitle"]?.Value ?? "Unknown"
-                                };
-                                subtitles.Add(subtitle);
-                            }                                                            
-                        }
-                        return subtitles;
+                                Id = node.Attributes?["id"]?.Value ?? string.Empty,
+                                Language = node.Attributes?["language"]?.Value ?? "Unknown",
+                                Key = node.Attributes?["key"]?.Value ?? string.Empty,
+                                DisplayTitle = node.Attributes?["displayTitle"]?.Value ?? "Unknown"
+                            };
+                            subtitles.Add(subtitle);
+                        }                        
                     }
                     else
                     {
@@ -133,8 +165,7 @@ namespace PlexGifMaker.Data
             {
                 _logger.LogError("An error occurred while fetching subtitles for episode {EpisodeId}: {ErrorMessage}", episodeId, ex.Message);
             }
-
-            return null;
+            return subtitles;
         }
         public async Task<List<SubtitleItem>> GetActualSubtitlesAsync(string episodeId, string key)
         {
@@ -587,7 +618,44 @@ namespace PlexGifMaker.Data
             }
         }
 
-        public int? ExtractStreamIdFromXml(string xmlContent)
+        // Method to extract subtitles embedded within an MKV file
+        public List<Subtitle> GetEmbeddedSubtitles(string filePath)
+        {
+            var subtitles = new List<Subtitle>();
+            if (!File.Exists(filePath))
+            {
+                _logger.LogError("File does not exist: {FilePath}", filePath);
+                return subtitles;
+            }
+
+            try
+            {
+                var mediaInfo = new MediaInfoWrapper(filePath);
+                var subtitleTracks = mediaInfo.Subtitles;
+                foreach (var track in subtitleTracks)
+                {
+                    if (!string.IsNullOrEmpty(track.Language) || !string.IsNullOrEmpty(track.Codec.ToString()))
+                    {
+                        subtitles.Add(new Subtitle
+                        {
+                            Language = track.Language,
+                            Key = track.Id.ToString(),
+                            DisplayTitle = $"{track.Language} - {track.Format}",
+                            Codec = track.Codec
+                        });
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to extract subtitles from file: {FilePath}", filePath);
+            }
+
+            return subtitles;
+        }
+    
+
+    public int? ExtractStreamIdFromXml(string xmlContent)
         {
             try
             {
@@ -641,6 +709,7 @@ namespace PlexGifMaker.Data
         public string? Language { get; set; }
         public string? Key { get; set; }
         public string? DisplayTitle { get; set; }
+        public SubtitleCodec Codec { get; internal set; }
         // Additional attributes as needed
     }
     public class SubtitleText

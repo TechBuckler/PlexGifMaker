@@ -24,13 +24,6 @@
         @errorMessage
     </div>
 }
-@if (!string.IsNullOrEmpty(selectedEpisode) && !subsFound)
-{
-    <div class="alert alert-warning">
-        No subtitles found for the selected episode.
-        <button class="btn btn-success mt-2" @onclick="DownloadSubtitles">Download Subtitles</button>
-    </div>
-}
 
 <h3>Select Library, TV Show, Episode, and Subtitle Segment</h3>
 
@@ -97,12 +90,13 @@ else
                     <option value="@episode.Id">@episode.Title</option>
                 }
             </select>
+            <button class="btn btn-success mt-2" @onclick="DownloadSubtitles">Download Subtitles</button>
         </div>
     }
     @if(subtitleOptions != null && subtitleOptions.Any())
     {
         <div class="form-group" >
-        <label for="subtitle">Subtitle: </label>
+        <label for="subtitle">Subtitle Stream: </label>
             <select class="form-control" id="subtitle" value="@selectedSubtitleOptionKey" @onchange="HandleSubtitleOptionChange">
             <option value="">Select a subtitle</option>
             @foreach (var subtitle in subtitleOptions)
@@ -321,13 +315,9 @@ else
         else
         {
             _logger.LogWarning("OnSubtitleOptionChange received a null or invalid ChangeEventArgs.");
-            // Set selectedLibraryKey to an empty string or a default value if null or invalid.
-            selectedSubtitleOptionKey = string.Empty;            
-            // Optionally, you can update the UI or take other actions to notify the user.
         }
         subtitles = null;
         await setSubtitles();
-
     }
 
     private async Task DownloadSubtitles()
@@ -494,6 +484,7 @@ else
 
     private async Task HandleShowChange(ChangeEventArgs e)
     {
+        episodes = null; // Clear episodes when changing shows
         // Ensure e.Value is not null before using it.
         if (e?.Value != null)
         {
@@ -507,16 +498,13 @@ else
             {
                 _logger.LogWarning("selectedShowKey is null or whitespace.");
                 // Handle the case where selectedShowKey is null or whitespace
-                episodes = new List<Episode>(); // Assign an empty list or appropriate default value
             }
         }
         else
         {
             _logger.LogWarning("HandleShowChange received a null ChangeEventArgs.");
-            // Handle the case where e.Value is null
-            // For example, you might want to clear the episodes or set them to a default state
-            episodes = new List<Episode>(); // Assign an empty list or appropriate default value
         }
+        selectedEpisode = null; // Clear selected episode when changing shows        
         subtitles = null;
         subtitleOptions = null;        
         selectedSubtitleOptionKey = null;
@@ -562,6 +550,7 @@ else
             else
             {
                 subsFound = true;
+                errorMessage = null;
             }
 
             StateHasChanged();
