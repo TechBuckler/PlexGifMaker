@@ -1,5 +1,6 @@
 ﻿using SubtitlesParser.Classes;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
@@ -82,7 +83,7 @@ namespace PlexGifMaker.Data
 
             return episodes;
         }
-        public async Task<Subtitle?> GetEnglishSubtitleAsync(string episodeId)
+        public async Task<List<Subtitle?>> GetSubtitleOptionsAsync(string episodeId)
         {
             var client = _httpClientFactory.CreateClient();
             var requestUri = $"{_baseUri}/library/metadata/{episodeId}?X-Plex-Token={_token}";
@@ -97,16 +98,26 @@ namespace PlexGifMaker.Data
                     var doc = new XmlDocument();
                     doc.LoadXml(content);
 
-                    var subtitleNode = doc.SelectSingleNode("//Stream[@streamType='3' and (@languageCode='eng' or @language='English') and @codec='srt']");
+                    var subtitleNodes = doc.SelectNodes("//Stream[@streamType='3']");
 
-                    if (subtitleNode != null)
+                    if (subtitleNodes != null)
                     {
-                        return new Subtitle
+                        List<Subtitle?> subtitles = new List<Subtitle?>();
+                        foreach(XmlNode node in subtitleNodes)
                         {
-                            Id = subtitleNode.Attributes?["id"]?.Value ?? string.Empty,  // Using ?? to ensure non-null return
-                            Language = subtitleNode.Attributes?["language"]?.Value ?? "Unknown",
-                            Key = subtitleNode.Attributes?["key"]?.Value ?? string.Empty,
-                        };
+                            if (!string.IsNullOrEmpty(node.Attributes?["key"]?.Value))
+                            {
+                                var subtitle = new Subtitle
+                                {
+                                    Id = node.Attributes?["id"]?.Value ?? string.Empty,  
+                                    Language = node.Attributes?["language"]?.Value ?? "Unknown",
+                                    Key = node.Attributes?["key"]?.Value ?? string.Empty,
+                                    DisplayTitle = node.Attributes?["displayTitle"]?.Value ?? "Unknown"
+                                };
+                                subtitles.Add(subtitle);
+                            }                                                            
+                        }
+                        return subtitles;
                     }
                     else
                     {
@@ -161,7 +172,7 @@ namespace PlexGifMaker.Data
                 return new List<SubtitleItem>();
             }
         }
-        public async Task<string?> CreateGifFromSubtitlesAsync(string episodeId, int startSubtitleTime, int endSubtitleTime)
+        public async Task<string?> CreateGifFromSubtitlesAsync(string episodeId, int startSubtitleTime, int endSubtitleTime, string selectedKey = "")
         {
             var startTime = TimeSpan.FromMilliseconds(startSubtitleTime);
             var endTime = TimeSpan.FromMilliseconds(endSubtitleTime);
@@ -196,6 +207,10 @@ namespace PlexGifMaker.Data
 
             var subtitleKeyNode = doc.SelectSingleNode("//Stream[@streamType='3' and (@languageCode='eng' or @language='English')]");
             var subtitleKey = subtitleKeyNode?.Attributes?["key"]?.Value;
+            if(string.IsNullOrEmpty(subtitleKey))
+            {
+                subtitleKey = selectedKey;
+            }
 
             string videoFile = $"{_baseUri}{key}?X-Plex-Token={_token}";
             string localSubtitlePath = !string.IsNullOrEmpty(subtitleKey)
@@ -212,9 +227,7 @@ namespace PlexGifMaker.Data
         }
         private async Task<string> DownloadSubtitleAsync(HttpClient client, string subtitleUrl)
         {
-            // Check if running on Heroku by looking for the DYNO environment variable
-            bool isHeroku = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("DYNO"));
-            string directoryPath = isHeroku ? "/app/heroku_output/wwwroot/gifs" : Path.Combine("wwwroot", "gifs");
+            string directoryPath = Path.Combine("wwwroot", "gifs");
 
             // Ensure the directory exists
             if (!Directory.Exists(directoryPath))
@@ -233,9 +246,9 @@ namespace PlexGifMaker.Data
 
                 // Detect encoding and convert to UTF-8 if necessary
                 var detectedResult = CharsetDetector.DetectFromBytes(subtitleBytes);
-                if (detectedResult.Detected?.EncodingName != Encoding.UTF8.EncodingName)
+                if (detectedResult.Detected?.EncodingName !=  "utf-8")
                 {
-                    var subtitleText = detectedResult.Detected?.Encoding.GetString(subtitleBytes);
+                    var subtitleText = BitConverter.ToString(subtitleBytes);
                     await File.WriteAllTextAsync(localSubtitlePath, subtitleText, Encoding.UTF8);
                 }
 
@@ -521,12 +534,12 @@ namespace PlexGifMaker.Data
             return TimeSpan.Zero;
         }
 
-        public async Task<List<SubtitleItem>> FetchSubtitlesAsync(string? episodeId)
+        public async Task FetchSubtitlesAsync(string? episodeId)
         {
             if (string.IsNullOrEmpty(episodeId))
             {
                 _logger.LogError("Episode ID is null or empty.");
-                return new List<SubtitleItem>(); // Early exit with an empty list if no valid episode ID is provided
+                return;
             }
             var client = _httpClientFactory.CreateClient();
             var requestUri = $"{_baseUri}/library/metadata/{episodeId}/subtitles?language=en&hearingImpaired=0&forced=0&X-Plex-Token={_token}"; //GET request
@@ -541,7 +554,7 @@ namespace PlexGifMaker.Data
                     if (streamId == null)
                     {
                         _logger.LogWarning("No subtitles were found from OpenSubtitles for episode {EpisodeId}.", episodeId);
-                        return new List<SubtitleItem>();
+                        return;
                     }
                     else
                     {
@@ -550,36 +563,30 @@ namespace PlexGifMaker.Data
                         var responseSub = await client.PutAsync(requestSubUri, null);
                         if (responseSub.IsSuccessStatusCode)
                         {
-                            var subtitle = await GetEnglishSubtitleAsync(episodeId);
-                            if (subtitle == null || string.IsNullOrEmpty(subtitle.Key))
-                            {
-                                _logger.LogWarning("No English subtitles found for episode {EpisodeId}.", episodeId);
-                                return new List<SubtitleItem>();
-                            }
-                            else
-                            {
-                                return await GetActualSubtitlesAsync(episodeId, subtitle.Key);
-                            }
+                            var contentSub = await responseSub.Content.ReadAsStringAsync();
+                            _logger.LogInformation("Subtitles fetched successfully for episode {EpisodeId}.", episodeId);
+                            return;
                         }
                         else
                         {
                             _logger.LogError("Failed to fetch subtitles for episode {EpisodeId}. Status code: {StatusCode}", episodeId, responseSub.StatusCode);
-                            return new List<SubtitleItem>();
+                            return;
                         }
                     }
                 }
                 else
                 {
                     _logger.LogError("Failed to fetch subtitles for episode {EpisodeId}. Status code: {StatusCode}", episodeId, response.StatusCode);
-                    return new List<SubtitleItem>();
+                    return;
                 }
             }
             catch (Exception ex)
             {
                 _logger.LogError("An error occurred while fetching subtitles for episode {EpisodeId}: {ErrorMessage}", episodeId, ex.Message);
-                return new List<SubtitleItem>();
+                return;
             }
         }
+
         public int? ExtractStreamIdFromXml(string xmlContent)
         {
             try
@@ -591,7 +598,7 @@ namespace PlexGifMaker.Data
                 var firstStream = document.Descendants("Stream").FirstOrDefault();
 
                 // Get the 'sourceKey' attribute value
-                var sourceKey = firstStream?.Attribute("sourceKey")?.Value;
+                var sourceKey = firstStream?.Attribute("key")?.Value;
 
                 if (sourceKey != null)
                 {
@@ -633,6 +640,7 @@ namespace PlexGifMaker.Data
         public string? Id { get; set; }
         public string? Language { get; set; }
         public string? Key { get; set; }
+        public string? DisplayTitle { get; set; }
         // Additional attributes as needed
     }
     public class SubtitleText

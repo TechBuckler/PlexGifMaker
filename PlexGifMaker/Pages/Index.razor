@@ -9,6 +9,7 @@
 @using SubtitlesParser
 @using SubtitlesParser.Classes;
 @using System.Globalization
+@using System.Web
 
 @if (!string.IsNullOrEmpty(successMessage))
 {
@@ -97,6 +98,20 @@ else
             </select>
         </div>
     }
+    @if(subtitleOptions != null && subtitleOptions.Any())
+    {
+        <div class="form-group" >
+        <label for="subtitle">Subtitle: </label>
+            <select class="form-control" id="subtitle" value="@selectedSubtitleOptionKey" @onchange="HandleSubtitleOptionChange">
+            <option value="">Select a subtitle</option>
+            @foreach (var subtitle in subtitleOptions)
+            {
+                <option value="@subtitle.Key">@subtitle.Language - @subtitle.DisplayTitle</option>
+            }
+            </select>
+            </div>
+    }
+
 
     @if (selectedEpisode != null && subtitles != null && subtitles.Any())
     {
@@ -171,6 +186,7 @@ else
     private string? selectedLibraryKey;
     private string? selectedShowKey;
     private string? selectedEpisode;
+    private string? selectedSubtitleOptionKey;
     private List<Library>? libraries;
     private List<Episode>? shows;
     private List<Episode>? episodes;
@@ -184,6 +200,7 @@ else
     private TimeSpan totalDuration;
     float totalDurationInSeconds;
     private bool subsFound = true; //default to true so it doesn't show the warning message if subs are not found
+    private List<Subtitle>? subtitleOptions;
 
     private string startSubtitleTimeString
     {
@@ -294,6 +311,24 @@ else
         }
     }
 
+    private async Task HandleSubtitleOptionChange(ChangeEventArgs e)
+    {
+        if (e?.Value != null)
+        {
+            selectedSubtitleOptionKey = e.Value.ToString();
+        }
+        else
+        {
+            _logger.LogWarning("OnSubtitleOptionChange received a null or invalid ChangeEventArgs.");
+            // Set selectedLibraryKey to an empty string or a default value if null or invalid.
+            selectedSubtitleOptionKey = string.Empty;            
+            // Optionally, you can update the UI or take other actions to notify the user.
+        }
+        subtitles = null;
+        await setSubtitles();
+
+    }
+
     private async Task DownloadSubtitles()
     {
         isLoading = true;
@@ -301,15 +336,8 @@ else
 
         try
         {
-            subtitles = await PlexService.FetchSubtitlesAsync(selectedEpisode);
-            if (subtitles == null || !subtitles.Any())
-            {
-                errorMessage = "Failed to download subtitles. Please try again.";
-            }
-            else
-            {
-                successMessage = "Subtitles downloaded successfully.";
-            }
+            await PlexService.FetchSubtitlesAsync(selectedEpisode);
+            await setSubtitles();
         }
         catch (Exception ex)
         {
@@ -343,7 +371,14 @@ else
         try
         {
             // Call the method to create a GIF from the selected episode and subtitle timings
-            gifPath = await PlexService.CreateGifFromSubtitlesAsync(selectedEpisode, selectedStartSubtitleTime, selectedEndSubtitleTime);
+            if(selectedSubtitleOptionKey != null)
+            {
+                gifPath = await PlexService.CreateGifFromSubtitlesAsync(selectedEpisode, selectedStartSubtitleTime, selectedEndSubtitleTime, selectedSubtitleOptionKey);
+            }
+            else
+            {
+                gifPath = await PlexService.CreateGifFromSubtitlesAsync(selectedEpisode, selectedStartSubtitleTime, selectedEndSubtitleTime);
+            }            
         }
         finally
         {
@@ -385,50 +420,6 @@ else
             // Handle the case where e.Value is null or not a valid integer string.
             // For example, you might want to set selectedStartSubtitleTime to a default value or log a warning.
         }
-    }
-
-    private async Task OnLibraryChange(ChangeEventArgs e)
-    {
-        // Check if the event argument and its value are not null
-        if (e?.Value != null)
-        {
-            selectedLibraryKey = e.Value.ToString();
-        }
-        else
-        {
-            _logger.LogWarning("OnLibraryChange received a null or invalid ChangeEventArgs.");
-            // Set selectedLibraryKey to an empty string or a default value if null or invalid.
-            selectedLibraryKey = string.Empty;
-            // Optionally, you can update the UI or take other actions to notify the user.
-        }
-
-        // Proceed only if selectedLibraryKey is not empty to avoid errors in the GetShowsAsync call.
-        if (!string.IsNullOrEmpty(selectedLibraryKey))
-        {
-            var fetchedItems = await PlexService.GetShowsAsync(selectedLibraryKey);
-
-            // Determine whether fetched items are shows or episodes
-            if (fetchedItems.Any() && fetchedItems.All(item => IsShowItem(item)))
-            {
-                shows = fetchedItems;
-                isShowStructure = true;
-                episodes = null; // Clear episodes as we're dealing with shows now
-            }
-            else
-            {
-                episodes = fetchedItems; // Directly set episodes if no shows are found
-                isShowStructure = false; // No show structure, we have a flat structure
-            }
-        }
-        else
-        {
-            // Handle the case where selectedLibraryKey is empty or invalid.
-            // You may want to log this event or notify the user.
-            _logger.LogWarning("Selected library key is empty or invalid.");
-        }
-
-        selectedShowKey = null; // Reset show selection
-        StateHasChanged();
     }
 
     // Utility method to determine if an item represents a show (you might need to adjust the logic based on your data structure)
@@ -488,6 +479,9 @@ else
         episodes = null; // Clear episodes when changing libraries
         selectedEpisode = null; // Clear selected episode when changing libraries
         selectedShowKey = null;
+        selectedSubtitleOptionKey = null;
+        subtitles = null;
+        subtitleOptions = null;
         if (shows.Any(x => x.IsMovie))
         {
             episodes = shows;
@@ -522,7 +516,9 @@ else
             // For example, you might want to clear the episodes or set them to a default state
             episodes = new List<Episode>(); // Assign an empty list or appropriate default value
         }
-
+        subtitles = null;
+        subtitleOptions = null;        
+        selectedSubtitleOptionKey = null;
         StateHasChanged();
     }
 
@@ -538,34 +534,34 @@ else
             // Handle the case appropriately, possibly setting selectedEpisode to a default or empty value
             return;
         }
-
+        subtitles = null;
+        selectedSubtitleOptionKey = null;
+        subtitleOptions = null;
+        subtitleOptions = await PlexService.GetSubtitleOptionsAsync(selectedEpisode);
+    }
+    public async Task setSubtitles()
+    {
+        var subtitle = subtitleOptions.FirstOrDefault();
         if (!string.IsNullOrEmpty(selectedEpisode))
         {
-            var subtitle = await PlexService.GetEnglishSubtitleAsync(selectedEpisode);
-            if (subtitle?.Key != null)
+            subtitleOptions = await PlexService.GetSubtitleOptionsAsync(selectedEpisode);
+            if (selectedSubtitleOptionKey != null)
             {
-                subtitles = await PlexService.GetActualSubtitlesAsync(selectedEpisode, subtitle.Key);
-                totalDuration = await PlexService.GetEpisodeDurationAsync(selectedEpisode);
-                totalDurationInSeconds = (float)totalDuration.TotalSeconds;
+                subtitles = await PlexService.GetActualSubtitlesAsync(selectedEpisode, selectedSubtitleOptionKey);
+            }
+            totalDuration = await PlexService.GetEpisodeDurationAsync(selectedEpisode);
+            totalDurationInSeconds = (float)totalDuration.TotalSeconds;
 
-                _logger.LogInformation($"Fetched subtitles for episode {selectedEpisode}");
-                _logger.LogInformation($"Fetched {subtitles.Count} subtitles for episode {selectedEpisode}");
-                if(subtitles.Count == 0)
-                {
-                    subsFound = false;
-                    errorMessage = "No subtitles found for the selected episode. Please enter the start and end times manually.";
-                }
-                else
-                {
-                    subsFound = true;
-                }
+            _logger.LogInformation($"Fetched subtitles for episode {selectedEpisode}");
+            _logger.LogInformation($"Fetched {subtitles.Count} subtitles for episode {selectedEpisode}");
+            if (subtitles.Count == 0)
+            {
+                subsFound = false;
+                errorMessage = "No subtitles found for the selected episode. Please enter the start and end times manually.";
             }
             else
             {
-                _logger.LogWarning("No valid subtitle key found.");
-                // Handle the case where the subtitle or its key is null.
-                // You might want to set subtitles to an empty list or a default state
-                subtitles = new List<SubtitlesParser.Classes.SubtitleItem>();
+                subsFound = true;
             }
 
             StateHasChanged();
