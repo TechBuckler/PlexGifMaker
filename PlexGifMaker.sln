@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PlexGifMaker", "PlexGifMake
 EndProject
 Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{291FD71B-227A-400A-9357-D2D09CF2D84E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlexGifMaker.Tests", "PlexGifMaker.Tests\PlexGifMaker.Tests.csproj", "{1DAE6377-44E5-4954-899C-8E83201CD8E5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{291FD71B-227A-400A-9357-D2D09CF2D84E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{291FD71B-227A-400A-9357-D2D09CF2D84E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{291FD71B-227A-400A-9357-D2D09CF2D84E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1DAE6377-44E5-4954-899C-8E83201CD8E5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1DAE6377-44E5-4954-899C-8E83201CD8E5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1DAE6377-44E5-4954-899C-8E83201CD8E5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1DAE6377-44E5-4954-899C-8E83201CD8E5}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
