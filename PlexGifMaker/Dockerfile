@@ -26,6 +26,4 @@ RUN dotnet publish "PlexGifMaker.csproj" -c Release -o /app/publish /p:UseAppHos
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-
-
 ENTRYPOINT ["dotnet", "PlexGifMaker.dll"]

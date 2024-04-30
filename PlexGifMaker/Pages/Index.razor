@@ -69,7 +69,7 @@ else
                     <option value="@episode.Id">@episode.Title</option>
                 }
             </select>
-            <button class="btn btn-success mt-2" @onclick="DownloadSubtitles">Download Subtitles</button>
+            @* <button class="btn btn-success mt-2" @onclick="DownloadSubtitles">Download Subtitles</button> *@
         </div>
     }
     else if (episodes != null && episodes.Any() && episodes.All(x => x.IsMovie))
@@ -83,21 +83,24 @@ else
                     <option value="@episode.Id">@episode.Title</option>
                 }
             </select>
-            <button class="btn btn-success mt-2" @onclick="DownloadSubtitles">Download Subtitles</button>
+            @* <button class="btn btn-success mt-2" @onclick="DownloadSubtitles">Download Subtitles</button> *@
         </div>
     }
     @if(subtitleOptions != null && subtitleOptions.Any())
     {
-        <div class="form-group" >
-        <label for="subtitle">Subtitle Stream: </label>
-            <select class="form-control" id="subtitle" value="@selectedSubtitleOptionKey" @onchange="HandleSubtitleOptionChange">
-            <option value="">Select a subtitle</option>
-            @foreach (var subtitle in subtitleOptions)
-            {
-                <option value="@subtitle?.Key">@subtitle?.Language - @subtitle?.DisplayTitle</option>
-            }
+        <div class="form-group">
+            <label for="subtitle">Subtitle Stream: </label>
+            <select class="form-control" id="subtitle" @onchange="HandleSubtitleOptionChange">
+                <option value="">Select a subtitle</option>
+                @foreach (var subtitle in subtitleOptions.Select((value, index) => new { Value = value, Index = index }))
+                {
+                    <option value="@(string.IsNullOrEmpty(subtitle.Value.Key) ? subtitle.Index.ToString() : subtitle.Value.Key)">
+                        @subtitle.Value.Language - @subtitle.Value.DisplayTitle
+                    </option>
+                }
             </select>
-            </div>
+        </div>
+
     }
 
 
@@ -151,6 +154,15 @@ else
             <button class="btn btn-primary mt-3" @onclick="CreateGif" disabled="@isCreatingGif">Create GIF</button>
     }
 
+    if (isExtracting)
+    {
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="sr-only">Extracting Embedded Subtitles...</span>
+            </div>
+        </div>
+    }
+
     @if (!string.IsNullOrEmpty(gifPath))
     {
         <div>
@@ -181,11 +193,12 @@ else
     private List<SubtitleItem>? subtitles;
     private string? gifPath; // Variable to store the path of the generated GIF
     private bool isCreatingGif = false;
+    private bool isExtracting = false;
     private string? errorMessage;
     private TimeSpan totalDuration;
     float totalDurationInSeconds;
     private bool subsFound = true; //default to true so it doesn't show the warning message if subs are not found
-    private List<Subtitle?>? subtitleOptions;
+    private List<PlexService.Subtitle?>? subtitleOptions;
 
     private string startSubtitleTimeString
     {
@@ -298,39 +311,49 @@ else
 
     private async Task HandleSubtitleOptionChange(ChangeEventArgs e)
     {
-        if (e?.Value != null)
+        var value = e.Value?.ToString();
+        if (!string.IsNullOrEmpty(value))
         {
-            selectedSubtitleOptionKey = e.Value.ToString();
+            if (int.TryParse(value, out var index))
+            {
+                // The value is an index
+                selectedSubtitleOptionKey = index.ToString();
+            }
+            else
+            {
+                // The value is a key
+                selectedSubtitleOptionKey = value;                
+            }
+            await setSubtitles();
         }
         else
         {
             _logger.LogWarning("OnSubtitleOptionChange received a null or invalid ChangeEventArgs.");
         }
-        subtitles = null;
-        await setSubtitles();
     }
 
-    private async Task DownloadSubtitles()
-    {
-        isLoading = true;
-        StateHasChanged();
 
-        try
-        {
-            await PlexService.FetchSubtitlesAsync(selectedEpisode);
-            await setSubtitles();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError($"Error downloading subtitles: {ex.Message}");
-            errorMessage = "An error occurred while downloading subtitles.";
-        }
-        finally
-        {
-            isLoading = false;
-            StateHasChanged();
-        }
-    }
+    // private async Task DownloadSubtitles()
+    // {
+    //     isLoading = true;
+    //     StateHasChanged();
+
+    //     try
+    //     {
+    //         await PlexService.FetchSubtitlesAsync(selectedEpisode);
+    //         await setSubtitles(e);
+    //     }
+    //     catch (Exception ex)
+    //     {
+    //         _logger.LogError($"Error downloading subtitles: {ex.Message}");
+    //         errorMessage = "An error occurred while downloading subtitles.";
+    //     }
+    //     finally
+    //     {
+    //         isLoading = false;
+    //         StateHasChanged();
+    //     }
+    // }
 
 
     private async Task CreateGif()
@@ -529,11 +552,20 @@ else
     {
         if (!string.IsNullOrEmpty(selectedEpisode))
         {
-            subtitleOptions = await PlexService.GetSubtitleOptionsAsync(selectedEpisode);
-            if (selectedSubtitleOptionKey != null)
+            // If selectedSubtitleOptionKey is not null, pass it to GetActualSubtitlesAsync
+            if (int.TryParse(selectedSubtitleOptionKey, out int index))
             {
+                // If parsing is successful, use the index to extract subtitles
+                isExtracting = true;
+                subtitles = await PlexService.ExtractSubtitles(selectedEpisode, index);
+            }
+            else
+            {
+                // If parsing fails, treat selectedSubtitleOptionKey as a string key
                 subtitles = await PlexService.GetActualSubtitlesAsync(selectedEpisode, selectedSubtitleOptionKey);
             }
+            isExtracting = false;
+
             totalDuration = await PlexService.GetEpisodeDurationAsync(selectedEpisode);
             totalDurationInSeconds = (float)totalDuration.TotalSeconds;
 
