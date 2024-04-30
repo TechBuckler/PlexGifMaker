@@ -36,6 +36,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="subtitles\" />
     <Folder Include="wwwroot\gifs\" />
   </ItemGroup>
 
