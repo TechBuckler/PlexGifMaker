@@ -94,8 +94,8 @@ else
                 <option value="">Select a subtitle</option>
                 @foreach (var subtitle in subtitleOptions.Select((value, index) => new { Value = value, Index = index }))
                 {
-                    <option value="@(string.IsNullOrEmpty(subtitle.Value.Key) ? subtitle.Index.ToString() : subtitle.Value.Key)">
-                        @subtitle.Value.Language - @subtitle.Value.DisplayTitle
+                    <option value="@(string.IsNullOrEmpty(subtitle?.Value?.Key) ? subtitle?.Index.ToString() : subtitle.Value.Key)">
+                        @subtitle?.Value?.Language - @subtitle?.Value?.DisplayTitle
                     </option>
                 }
             </select>
@@ -362,7 +362,6 @@ else
         if (string.IsNullOrEmpty(selectedEpisode) || selectedEndSubtitleTime == 0)
         {
             // Notify user to make the necessary selections
-            // You can set an error message here to show in the UI
             errorMessage = "Please select all the necessary options before creating a GIF.";
             StateHasChanged();
             return;
@@ -389,12 +388,6 @@ else
             // GIF creation is complete, update the UI
             isCreatingGif = false;
             StateHasChanged();
-        }
-
-        // After GIF creation, check if the path is not null and notify the UI to update
-        if (!string.IsNullOrEmpty(gifPath))
-        {
-            StateHasChanged(); // If there's a new GIF, the UI needs to update to show it
         }
     }
 
@@ -553,23 +546,27 @@ else
         if (!string.IsNullOrEmpty(selectedEpisode))
         {
             // If selectedSubtitleOptionKey is not null, pass it to GetActualSubtitlesAsync
+            await PlexService.DeleteSubtitleFilesAsync();
             if (int.TryParse(selectedSubtitleOptionKey, out int index))
             {
                 // If parsing is successful, use the index to extract subtitles
                 isExtracting = true;
+                StateHasChanged();
                 subtitles = await PlexService.ExtractSubtitles(selectedEpisode, index);
             }
             else
             {
                 // If parsing fails, treat selectedSubtitleOptionKey as a string key
-                subtitles = await PlexService.GetActualSubtitlesAsync(selectedEpisode, selectedSubtitleOptionKey);
+                if (selectedSubtitleOptionKey != null)
+                {
+                    subtitles = await PlexService.GetActualSubtitlesAsync(selectedEpisode, selectedSubtitleOptionKey);
+                }
             }
             isExtracting = false;
 
             totalDuration = await PlexService.GetEpisodeDurationAsync(selectedEpisode);
             totalDurationInSeconds = (float)totalDuration.TotalSeconds;
 
-            _logger.LogInformation($"Fetched subtitles for episode {selectedEpisode}");
             _logger.LogInformation($"Fetched {subtitles?.Count} subtitles for episode {selectedEpisode}");
             if (subtitles?.Count == 0)
             {

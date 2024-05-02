@@ -9,6 +9,10 @@ RUN apt-get update -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+run mkdir "/app/subtitles"
+run mkdir "/app/logs"
+run mkdir -p "/app/wwwroot/gifs"
+
 # Use the .NET SDK image to build the project
 FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 WORKDIR /src

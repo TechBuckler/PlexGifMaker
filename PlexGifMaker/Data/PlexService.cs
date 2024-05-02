@@ -1,18 +1,8 @@
 ﻿using SubtitlesParser.Classes;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
-using UtfUnknown;
-using System.IO;
-using static PlexGifMaker.Data.PlexService;
-using MediaInfo;
-using MediaInfo.Model;
-using log4net.Filter;
-using System.Text.RegularExpressions;
-using Newtonsoft.Json;
-using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Database;
 namespace PlexGifMaker.Data
 {
     public class PlexService
@@ -21,11 +11,15 @@ namespace PlexGifMaker.Data
         private readonly IHttpClientFactory _httpClientFactory;
         private string? _baseUri;
         private string? _token;
+        private readonly string subtitlePath = Path.Combine(Directory.GetCurrentDirectory(), "subtitles");
 
         public PlexService(IHttpClientFactory httpClientFactory, ILogger<PlexService> logger)
         {
             _httpClientFactory = httpClientFactory;
             _logger = logger; // Initialize the logger
+            subtitlePath = Path.Combine(Directory.GetCurrentDirectory(), "subtitles")
+                       ?? throw new InvalidOperationException("Subtitle path cannot be determined.");
+
         }
         public void SetConfiguration(string baseUri, string token)
         {
@@ -33,11 +27,6 @@ namespace PlexGifMaker.Data
             {
                 throw new ArgumentException("Invalid base URI.", nameof(baseUri));
             }
-
-            //if (string.IsNullOrWhiteSpace(token))
-            //{
-            //    throw new ArgumentException("Token cannot be empty.", nameof(token));
-            //}
 
             _baseUri = baseUri;
             _token = token;
@@ -132,15 +121,6 @@ namespace PlexGifMaker.Data
 
                     var subtitleNodes = doc.SelectNodes("//Stream[@streamType='3']");
 
-                    //if(part == "mkv")
-                    //{
-                    //    var embeddedSubtitles = await GetEmbeddedSubtitles($"{_baseUri}{key}?X-Plex-Token={_token}");
-                    //    foreach(var subtitle in embeddedSubtitles)
-                    //    {
-                    //        subtitles.Add(subtitle);
-                    //    }
-                    //}
-
                     if (subtitleNodes != null)
                     {
 
@@ -154,7 +134,7 @@ namespace PlexGifMaker.Data
                                 DisplayTitle = node.Attributes?["displayTitle"]?.Value ?? "Unknown"
                             };
                             subtitles.Add(subtitle);
-                        }                        
+                        }
                     }
                     else
                     {
@@ -209,6 +189,7 @@ namespace PlexGifMaker.Data
                 if (response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync();
+                    File.WriteAllText(Path.Combine(subtitlePath, "subtitle.srt"), content);
                     var parser = new SubtitlesParser.Classes.Parsers.SubParser();
                     using var stream = new MemoryStream(Encoding.UTF8.GetBytes(content));
                     var items = parser.ParseStream(stream);
@@ -268,77 +249,69 @@ namespace PlexGifMaker.Data
 
             var subtitleKeyNode = doc.SelectSingleNode("//Stream[@streamType='3' and (@languageCode='eng' or @language='English')]");
             var subtitleKey = subtitleKeyNode?.Attributes?["key"]?.Value;
-            if(string.IsNullOrEmpty(subtitleKey))
+            if (string.IsNullOrEmpty(subtitleKey))
             {
                 subtitleKey = selectedKey;
             }
 
             string videoFile = $"{_baseUri}{key}?X-Plex-Token={_token}";
-            string localSubtitlePath;
-            if (int.TryParse(selectedKey, out _))
-            {
-                localSubtitlePath = Path.Combine(Directory.GetCurrentDirectory(), "subtitles", "subtitle.srt");
-            }
-            else
-            {
-                localSubtitlePath = !string.IsNullOrEmpty(subtitleKey)
-                ? await DownloadSubtitleAsync(client, $"{_baseUri}{subtitleKey}?X-Plex-Token={_token}")
-                : string.Empty;
-            }            
 
-            if (string.IsNullOrEmpty(localSubtitlePath) && !string.IsNullOrEmpty(subtitleKey))
-            {
-                _logger.LogWarning("Subtitle download failed for episode {EpisodeId}. Proceeding without subtitles.", episodeId);
-            }
-
-            var outputPath = await GenerateGifAsync(videoFile, localSubtitlePath, startTime, duration, episodeId);
+            var outputPath = await GenerateGifAsync(videoFile, subtitleKey, startTime, duration, episodeId);
             return outputPath?.Replace("wwwroot", string.Empty);
         }
-        private async Task<string> DownloadSubtitleAsync(HttpClient client, string subtitleUrl)
+
+        public async Task DeleteSubtitleFilesAsync(string fileName = "")
         {
-            string directoryPath = Path.Combine(Directory.GetCurrentDirectory(), "subtitles");
-
-            // Ensure the directory exists
-            if (!Directory.Exists(directoryPath))
+            var files = Directory.GetFiles(subtitlePath);
+            if (fileName == "")
             {
-                Directory.CreateDirectory(directoryPath);
-            }
-
-            var localSubtitlePath = Path.Combine(directoryPath, "subtitle.srt");
-            var subtitleResponse = await client.GetAsync(subtitleUrl);
-            if (subtitleResponse.IsSuccessStatusCode)
-            {
-                var subtitleBytes = await subtitleResponse.Content.ReadAsByteArrayAsync();
-                await File.WriteAllBytesAsync(localSubtitlePath, subtitleBytes);
-                _logger.LogInformation("Subtitles downloaded successfully to {localSubtitlePath}", localSubtitlePath);
-                
-
-                // Detect encoding and convert to UTF-8 if necessary
-                var detectedResult = CharsetDetector.DetectFromBytes(subtitleBytes);
-                if (detectedResult.Detected?.EncodingName !=  "utf-8")
+                await Task.Run(() =>
                 {
-                    var subtitleText = BitConverter.ToString(subtitleBytes);
-                    await File.WriteAllTextAsync(localSubtitlePath, subtitleText, Encoding.UTF8);
-                }
-
-                _logger.LogInformation("Subtitles downloaded successfully.");
+                    foreach (var file in files)
+                    {
+                        try
+                        {
+                            File.Delete(file);
+                            _logger.LogInformation("Deleted old subtitle file: {file}", file);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError("Failed to delete subtitle file {file}: {ex.Message}", file, ex.Message);
+                        }
+                    }
+                });
             }
             else
             {
-                _logger.LogWarning("Failed to download subtitles from {SubtitleUrl}.", subtitleUrl);
+                File.Delete(Path.Combine(subtitlePath, fileName));
             }
-            return localSubtitlePath;
         }
 
-        private async Task<string?> GenerateGifAsync(string videoFile, string subtitlePath, TimeSpan startTime, TimeSpan duration, string episodeId)
+        private async Task<string?> GenerateGifAsync(string videoFile, string subtitleKey, TimeSpan startTime, TimeSpan duration, string episodeId)
         {
             var formattedStartTime = startTime.ToString(@"hh\hmm\mss\sfff\ms").Replace(":", "");
+            var index = 0;
+            if (int.TryParse(subtitleKey, out int i))
+            {
+                index = i;
+            }
             var formattedEndTime = (startTime + duration).ToString(@"hh\hmm\mss\sfff\ms").Replace(":", "");
             var outputPath = Path.Combine("wwwroot", "gifs", $"{episodeId}_{formattedStartTime}_to_{formattedEndTime}.gif");
             outputPath = EnsureUniqueFilename(outputPath);
+            string filters;
+            var srt = Path.Combine(subtitlePath, "subtitle.srt");
+            var sup = Path.Combine(subtitlePath, "subtitle.sup");
+            if (!File.Exists(sup))
+            {
+                filters = $"fps=20,scale=400:-1:flags=lanczos,subtitles='{srt.Replace("\\", "\\\\")}':force_style='Fontsize=24'[v]";
+            }
+            else
+            {
+                string subtitleStream = $"[0:v][0:s:{index}]overlay[v]";
+                filters = $"fps=20,scale=400:-1:flags=lanczos,{subtitleStream}";
+            }
 
-            var filters = string.IsNullOrEmpty(subtitlePath) ? "fps=20,scale=400:-1:flags=lanczos" : $"fps=20,scale=400:-1:flags=lanczos,subtitles='{subtitlePath}':force_style='Fontsize=24'";
-            var ffmpegCommand = $"-report -v debug -y -i \"{videoFile}\" -ss {startTime} -t {duration} -r 10 -lavfi \"{filters}\" \"{outputPath}\"";
+            var ffmpegCommand = $"-report -v debug -y -i \"{videoFile}\" -ss {startTime} -t {duration} -r 10 -lavfi \"{filters}\" -map \"[v]\" -c:v gif \"{outputPath}\"";
             _logger.LogInformation("Executing FFmpeg command: {FfmpegCommand}", ffmpegCommand);
 
             using (var process = new Process())
@@ -349,6 +322,12 @@ namespace PlexGifMaker.Data
                 process.StartInfo.RedirectStandardOutput = true;
                 process.StartInfo.RedirectStandardError = true;
 
+                StringBuilder output = new();
+                StringBuilder error = new();
+
+                process.OutputDataReceived += (sender, args) => output.AppendLine(args.Data);
+                process.ErrorDataReceived += (sender, args) => error.AppendLine(args.Data);
+
                 process.Start();
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
@@ -356,18 +335,14 @@ namespace PlexGifMaker.Data
 
                 if (process.ExitCode != 0)
                 {
-                    _logger.LogError("FFmpeg encountered an error.");
+                    _logger.LogError("FFmpeg encountered an error: {ErrorOutput}", error.ToString());
                     return null;
                 }
             }
 
-            if (!string.IsNullOrEmpty(subtitlePath) && File.Exists(subtitlePath))
-            {
-                File.Delete(subtitlePath);
-            }
-
             return outputPath;
         }
+
         private static string EnsureUniqueFilename(string originalPath)
         {
             // Get the directory name and ensure it's not null or empty.
@@ -603,59 +578,6 @@ namespace PlexGifMaker.Data
             return TimeSpan.Zero;
         }
 
-        public async Task FetchSubtitlesAsync(string? episodeId)
-        {
-            if (string.IsNullOrEmpty(episodeId))
-            {
-                _logger.LogError("Episode ID is null or empty.");
-                return;
-            }
-            var client = _httpClientFactory.CreateClient();
-            var requestUri = $"{_baseUri}/library/metadata/{episodeId}/subtitles?language=en&hearingImpaired=0&forced=0&X-Plex-Token={_token}"; //GET request
-            try
-            {
-                var response = await client.GetAsync(requestUri);
-
-                if (response.IsSuccessStatusCode)
-                {
-                    var content = await response.Content.ReadAsStringAsync();
-                    var streamId = ExtractStreamIdFromXml(content);
-                    if (streamId == null)
-                    {
-                        _logger.LogWarning("No subtitles were found from OpenSubtitles for episode {EpisodeId}.", episodeId);
-                        return;
-                    }
-                    else
-                    {
-                        var items = new List<SubtitleItem>();
-                        var requestSubUri = $"{_baseUri}/library/metadata/{episodeId}/subtitles?key=%2Flibrary%2Fstreams%2F{streamId}&codec=srt&language=eng&hearingImpaired=0&forced=0&providerTitle=OpenSubtitles&X-Plex-Token={_token}"; //PUT request
-                        var responseSub = await client.PutAsync(requestSubUri, null);
-                        if (responseSub.IsSuccessStatusCode)
-                        {
-                            var contentSub = await responseSub.Content.ReadAsStringAsync();
-                            _logger.LogInformation("Subtitles fetched successfully for episode {EpisodeId}.", episodeId);
-                            return;
-                        }
-                        else
-                        {
-                            _logger.LogError("Failed to fetch subtitles for episode {EpisodeId}. Status code: {StatusCode}", episodeId, responseSub.StatusCode);
-                            return;
-                        }
-                    }
-                }
-                else
-                {
-                    _logger.LogError("Failed to fetch subtitles for episode {EpisodeId}. Status code: {StatusCode}", episodeId, response.StatusCode);
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError("An error occurred while fetching subtitles for episode {EpisodeId}: {ErrorMessage}", episodeId, ex.Message);
-                return;
-            }
-        }
-
         public async Task<List<SubtitleItem>> ExtractSubtitles(string episodeId, int index)
         {
             string metadataUrl = $"{_baseUri}/library/metadata/{episodeId}?X-Plex-Token={_token}";
@@ -688,7 +610,7 @@ namespace PlexGifMaker.Data
             string outputFilenameSrt = $"subtitle.srt";
             string outputFilePathSrt = Path.Combine(outputDir, outputFilenameSrt);
 
-            string ffmpegCommandSrt = $"ffmpeg -y -i \"{_baseUri}{remoteUrl}?X-Plex-Token={_token}\" -map 0:s:{index} \"{outputFilePathSrt}\"";
+            string ffmpegCommandSrt = $"ffmpeg -y -i \"{_baseUri}{remoteUrl}?X-Plex-Token={_token}\" -vcodec copy -map 0:s:{index} -c copy -an \"{outputFilePathSrt}\"";
 
             try
             {
@@ -698,6 +620,28 @@ namespace PlexGifMaker.Data
             catch (Exception e)
             {
                 _logger.LogError("Error extracting subtitles as .srt: {e.Message}", e.Message);
+                // Attempt to extract as .sup
+                // Delete the failed .srt file
+                await DeleteSubtitleFilesAsync("subtitle.srt");
+                string outputFilenameSup = $"subtitle.sup";
+                string outputFilePathSup = Path.Combine(outputDir, outputFilenameSup);
+                string ffmpegCommandSup = $"ffmpeg -y -i \"{_baseUri}{remoteUrl}?X-Plex-Token={_token}\" -map 0:s:{index} -c copy \"{outputFilePathSup}\"";
+
+                try
+                {
+                    ExecuteCommand(ffmpegCommandSup);
+                    Console.WriteLine($"Subtitles extracted successfully as .sup for {movieTitle}.");
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError("Error extracting subtitles as .sup: {ex.Message}", ex.Message);
+                }
+                if (File.Exists(outputFilePathSup))
+                {
+                    // Parsing .sup files is not supported directly, you might need to handle this case accordingly.
+                    // For example, you can log a message indicating that parsing .sup files is not supported.
+                    _logger.LogWarning("Subtitle extraction as .srt failed, and parsing .sup files is not supported directly.");
+                }
             }
 
             // Parsing the subtitle file
@@ -749,41 +693,6 @@ namespace PlexGifMaker.Data
             SRT,
             ASS,
             // Add more codecs as needed
-        }
-
-        public int? ExtractStreamIdFromXml(string xmlContent)
-        {
-            try
-            {
-                // Load the XML content into an XDocument
-                var document = XDocument.Parse(xmlContent);
-
-                // Retrieve the first <Stream> element
-                var firstStream = document.Descendants("Stream").FirstOrDefault();
-
-                // Get the 'sourceKey' attribute value
-                var sourceKey = firstStream?.Attribute("key")?.Value;
-
-                if (sourceKey != null)
-                {
-                    // Extract the number after "/library/streams/"
-                    var parts = sourceKey.Split('/');
-                    if (parts.Length > 2)
-                    {
-                        // The ID is expected to be the last part of the 'sourceKey'
-                        if (int.TryParse(parts.Last(), out int streamId))
-                        {
-                            return streamId; // Return the extracted ID
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                // Log or handle the exception as needed
-                Console.WriteLine($"An error occurred: {ex.Message}");
-            }
-            return null; // Return -1 or any other indicator for failure or non-existence
         }
     }
     public class Library

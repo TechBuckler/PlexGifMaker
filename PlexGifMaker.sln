@@ -7,7 +7,12 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PlexGifMaker", "PlexGifMake
 EndProject
 Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{291FD71B-227A-400A-9357-D2D09CF2D84E}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PlexGifMaker.Tests", "PlexGifMaker.Tests\PlexGifMaker.Tests.csproj", "{1DAE6377-44E5-4954-899C-8E83201CD8E5}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "PlexGifMaker.Tests", "PlexGifMaker.Tests\PlexGifMaker.Tests.csproj", "{1DAE6377-44E5-4954-899C-8E83201CD8E5}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{5C0D6BC9-3637-4D52-840A-D1533E69416D}"
+	ProjectSection(SolutionItems) = preProject
+		ngrok.yml = ngrok.yml
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
