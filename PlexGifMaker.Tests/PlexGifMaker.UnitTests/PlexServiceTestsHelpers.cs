@@ -69,6 +69,48 @@ internal static class PlexServiceTestsHelpers
 </Directory>
 </MediaContainer>
 ";
+    public const string Content2 = @"<MediaContainer size=""1"" allowSync=""1"" identifier=""com.plexapp.plugins.library"" librarySectionID=""2"" librarySectionTitle=""TV Shows"" librarySectionUUID=""ca22bbb6-386c-45e1-80bf-0c7ceb723f32"" mediaTagPrefix=""/system/bundle/media/flags/"" mediaTagVersion=""1698860922"">
+<script/>
+<Video ratingKey=""8407"" key=""/library/metadata/8407"" parentRatingKey=""8406"" grandparentRatingKey=""8405"" guid=""com.plexapp.agents.thetvdb://78886/1/1?lang=en"" parentGuid=""com.plexapp.agents.thetvdb://78886/1?lang=en"" grandparentGuid=""com.plexapp.agents.thetvdb://78886?lang=en"" type=""episode"" title=""Part 1"" grandparentKey=""/library/metadata/8405"" parentKey=""/library/metadata/8406"" librarySectionTitle=""TV Shows"" librarySectionID=""2"" librarySectionKey=""/library/sections/2"" grandparentTitle=""The 10th Kingdom"" parentTitle=""Season 1"" contentRating=""TV-PG"" summary=""Thanks to Relish the Troll King, the Evil Queen is once again free, and she has a trap ready for Prince Wendell. Her dog transforms into Prince Wendell and Prince Wendell becomes a dog. While trying to escape, the real Prince Wendell accidentally turns on a magic mirror, and runs away into 10th kingdom. Virginia hits him with her bicycle, feeling bad about hitting a dog; she takes him to work with her. Wolf and Relish the Troll Kings kids are after the real Prince, and they are looking all over New York for him."" index=""1"" parentIndex=""1"" viewCount=""1"" skipCount=""1"" lastViewedAt=""1670296206"" year=""2000"" thumb=""/library/metadata/8407/thumb/1720143370"" art=""/library/metadata/8405/art/1711547700"" parentThumb=""/library/metadata/8406/thumb/1711464916"" grandparentThumb=""/library/metadata/8405/thumb/1711547700"" grandparentArt=""/library/metadata/8405/art/1711547700"" grandparentTheme=""/library/metadata/8405/theme/1711547700"" duration=""5368532"" originallyAvailableAt=""2000-02-27"" addedAt=""1669931876"" updatedAt=""1720143370"" audienceRatingImage=""themoviedb://image.rating"" chapterSource=""media"">
+<Media id=""14332"" duration=""5368532"" bitrate=""4161"" width=""1920"" height=""1080"" aspectRatio=""1.78"" audioChannels=""2"" audioCodec=""aac"" videoCodec=""hevc"" videoResolution=""1080"" container=""mkv"" videoFrameRate=""24p"" audioProfile=""lc"" videoProfile=""main 10"">
+<Part accessible=""1"" exists=""1"" id=""14333"" key=""/library/parts/14333/1548421685/file.mkv"" duration=""5368532"" file=""/home/swuser/floatingcloud/TV Shows/The 10th Kingdom/Season 1/The 10th Kingdom - S01E01-02 - Part 1 + Part 2.mkv"" size=""2792448569"" audioProfile=""lc"" container=""mkv"" deepAnalysisVersion=""6"" requiredBandwidths=""8819,7622,5684,5022,5022,5022,5022,5022"" videoProfile=""main 10"">
+<Stream id=""36866"" streamType=""1"" default=""1"" codec=""hevc"" index=""0"" bitrate=""4161"" bitDepth=""10"" chromaLocation=""left"" chromaSubsampling=""4:2:0"" codedHeight=""1080"" codedWidth=""1920"" colorRange=""tv"" frameRate=""23.976"" height=""1080"" level=""120"" profile=""main 10"" refFrames=""1"" requiredBandwidths=""8651,7409,5463,4863,4863,4863,4863,4863"" width=""1920"" displayTitle=""1080p (HEVC Main 10)"" extendedDisplayTitle=""1080p (HEVC Main 10)""> </Stream>
+<Stream id=""36867"" streamType=""2"" selected=""1"" default=""1"" codec=""aac"" index=""1"" channels=""2"" bitrate=""142"" language=""English"" languageTag=""en"" languageCode=""eng"" audioChannelLayout=""stereo"" profile=""lc"" requiredBandwidths=""159,159,159,159,159,159,159,159"" samplingRate=""48000"" displayTitle=""English (AAC Stereo)"" extendedDisplayTitle=""English (AAC Stereo)""> </Stream>
+<Stream id=""36868"" streamType=""3"" codec=""pgs"" index=""2"" bitrate=""52"" language=""English"" languageTag=""en"" languageCode=""eng"" headerCompression=""1"" requiredBandwidths=""54,54,54,54,54,54,54,54"" displayTitle=""English (PGS)"" extendedDisplayTitle=""English (PGS)""> </Stream>
+<Stream id=""67947"" key=""/library/streams/67947"" streamType=""3"" codec=""srt"" language=""English"" languageTag=""en"" languageCode=""eng"" displayTitle=""English (SRT External)"" extendedDisplayTitle=""English (SRT External)""> </Stream>
+</Part>
+</Media>
+<Media id=""28565"" duration=""5368531"" bitrate=""4192"" width=""1920"" height=""1080"" aspectRatio=""1.78"" audioChannels=""2"" audioCodec=""aac"" videoCodec=""hevc"" videoResolution=""1080"" container=""mkv"" videoFrameRate=""24p"" audioProfile=""lc"" videoProfile=""main 10"">
+<Part accessible=""1"" exists=""1"" id=""28570"" key=""/library/parts/28570/1548421685/file.mkv"" duration=""5368531"" file=""/home/swuser/floatingfish/tv shows/The 10th Kingdom/Season 1/The 10th Kingdom - S01E01-02 - Part 1 + Part 2.mkv"" size=""2792448569"" audioProfile=""lc"" container=""mkv"" deepAnalysisVersion=""6"" requiredBandwidths=""8819,7622,5684,5022,5022,5022,5022,5022"" videoProfile=""main 10"">
+<Stream id=""95176"" streamType=""1"" default=""1"" codec=""hevc"" index=""0"" bitrate=""3999"" bitDepth=""10"" chromaLocation=""left"" chromaSubsampling=""4:2:0"" codedHeight=""1080"" codedWidth=""1920"" colorRange=""tv"" frameRate=""23.976"" height=""1080"" level=""120"" profile=""main 10"" refFrames=""1"" requiredBandwidths=""8651,7409,5463,4863,4863,4863,4863,4863"" width=""1920"" displayTitle=""1080p (HEVC Main 10)"" extendedDisplayTitle=""1080p (HEVC Main 10)""> </Stream>
+<Stream id=""95177"" streamType=""2"" selected=""1"" default=""1"" codec=""aac"" index=""1"" channels=""2"" bitrate=""142"" language=""English"" languageTag=""en"" languageCode=""eng"" audioChannelLayout=""stereo"" profile=""lc"" requiredBandwidths=""159,159,159,159,159,159,159,159"" samplingRate=""48000"" displayTitle=""English (AAC Stereo)"" extendedDisplayTitle=""English (AAC Stereo)""> </Stream>
+<Stream id=""95178"" streamType=""3"" codec=""pgs"" index=""2"" bitrate=""51"" language=""English"" languageTag=""en"" languageCode=""eng"" headerCompression=""1"" requiredBandwidths=""54,54,54,54,54,54,54,54"" displayTitle=""English (PGS)"" extendedDisplayTitle=""English (PGS)""> </Stream>
+</Part>
+</Media>
+<Guid id=""imdb://tt1245918""/>
+<Guid id=""tmdb://873430""/>
+<Guid id=""tvdb://298071""/>
+<Rating image=""themoviedb://image.rating"" value=""8.0"" type=""audience""/>
+<Director id=""80929"" filter=""director=80929"" tag=""David Carson""/>
+<Director id=""80930"" filter=""director=80930"" tag=""Herbert Wise""/>
+<Writer id=""80928"" filter=""writer=80928"" tag=""Simon Moore""/>
+<Chapter id=""289"" filter=""thumb=289"" index=""1"" startTimeOffset=""0"" endTimeOffset=""83709"" thumb=""/library/media/28565/chapterImages/1""/>
+<Chapter id=""289"" filter=""thumb=289"" index=""2"" startTimeOffset=""83709"" endTimeOffset=""1749000"" thumb=""/library/media/28565/chapterImages/2""/>
+<Chapter id=""289"" filter=""thumb=289"" index=""3"" startTimeOffset=""1749000"" endTimeOffset=""2703030"" thumb=""/library/media/28565/chapterImages/3""/>
+<Chapter id=""289"" filter=""thumb=289"" index=""4"" startTimeOffset=""2703030"" endTimeOffset=""3531570"" thumb=""/library/media/28565/chapterImages/4""/>
+<Chapter id=""289"" filter=""thumb=289"" index=""5"" startTimeOffset=""3531570"" endTimeOffset=""4528360"" thumb=""/library/media/28565/chapterImages/5""/>
+<Chapter id=""289"" filter=""thumb=289"" index=""6"" startTimeOffset=""4528360"" endTimeOffset=""5301710"" thumb=""/library/media/28565/chapterImages/6""/>
+<Chapter id=""289"" filter=""thumb=289"" index=""7"" startTimeOffset=""5301710"" endTimeOffset=""5368530"" thumb=""/library/media/28565/chapterImages/7""/>
+<Marker final=""1"" id=""65472"" type=""credits"" startTimeOffset=""5305678"" endTimeOffset=""5368532"">
+<Attributes id=""65472"" version=""4""/>
+</Marker>
+<Marker id=""65472"" type=""intro"" startTimeOffset=""1238"" endTimeOffset=""80065"">
+<Attributes id=""65472""/>
+</Marker>
+<Extras size=""0""> </Extras>
+<Related> </Related>
+</Video>
+</MediaContainer>";
     public static Mock<IHttpClientFactory> SetupMockHttpClientFactory(Mock<HttpMessageHandler> handlerMock)
     {
         var httpClient = new HttpClient(handlerMock.Object)

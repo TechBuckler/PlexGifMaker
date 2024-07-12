@@ -1,0 +1,198 @@
+﻿@using SubtitlesParser.Classes
+@using System.Globalization
+@using PlexGifMaker.Data
+
+@namespace PlexGifMaker.Data
+
+@if (SelectedEpisode != null && Subtitles != null && Subtitles.Any())
+{
+    <div class="form-group">
+        <label for="startSubtitle">Start Subtitle: </label>
+        <select class="form-control" id="startSubtitle" @onchange="HandleStartSubtitleChange">
+            <option value="">Select a start subtitle</option>
+            @foreach (var subtitle in Subtitles)
+            {
+                <option value="@subtitle.StartTime">@subtitle.ToString()</option>
+            }
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="endSubtitle">End Subtitle: </label>
+        <select class="form-control" id="endSubtitle" @onchange="HandleEndSubtitleChange">
+            <option value="">Select an end subtitle</option>
+            @foreach (var subtitle in Subtitles)
+            {
+                <option value="@subtitle.EndTime">@subtitle.ToString()</option>
+            }
+        </select>
+    </div>
+}
+
+<div class="timeline-container">
+    <h5>Subtitle Timeline:</h5>
+    <div class="progress bg-primary">
+        <div class="progress-bar bg-primary" role="progressbar"
+             style="width: @((selectedStartSubtitleTime / 1000.0 / TotalDuration.TotalSeconds) * 100)"
+             aria-valuenow="@(selectedStartSubtitleTime / 1000.0)" aria-valuemin="0" aria-valuemax="@TotalDuration.TotalSeconds">
+        </div>
+        <div class="progress-bar bg-warning" role="progressbar" style="width: @GetDurationWidthPercentage()"
+             aria-valuenow="@((selectedEndSubtitleTime - selectedStartSubtitleTime) / 1000.0)"
+             aria-valuemin="@(selectedStartSubtitleTime / 1000.0)"
+             aria-valuemax="@totalDurationInSeconds">
+        </div>
+    </div>
+</div>
+
+<div>
+    <label for="startSubtitleTime">Start Subtitle Time (ms):</label>
+    <input type="text" id="startSubtitleTime" value="@startSubtitleTimeString" @onchange="HandleStartSubtitleTimeChange" class="form-control" />
+
+    <label for="endSubtitleTime">End Subtitle Time (ms):</label>
+    <input type="text" id="endSubtitleTime" value="@endSubtitleTimeString" @onchange="HandleEndSubtitleTimeChange" class="form-control" />
+</div>
+
+<button class="btn btn-primary mt-3" @onclick="OnCreateGifClicked" disabled="@IsCreatingGif">Create GIF</button>
+
+@if (IsExtracting)
+{
+    <LoadingSpinner Message="Extracting Embedded Subtitles..." />
+}
+
+@if (!string.IsNullOrEmpty(GifPath))
+{
+    <div>
+        <h3>Generated GIF:</h3>
+        <p>Debug - GifPath: @GifPath</p>
+        <img src="@GifPath" class="img-fluid" alt="Generated GIF" />
+    </div>
+}
+else if (IsCreatingGif)
+{
+    <LoadingSpinner Message="Creating GIF..." />
+}
+
+@code {
+    [Parameter]
+    public string? SelectedEpisode { get; set; }
+
+    [Parameter]
+    public List<SubtitleItem>? Subtitles { get; set; }
+
+    [Parameter]
+    public TimeSpan TotalDuration { get; set; }
+
+    [Parameter]
+    public EventCallback<(int startTime, int endTime)> OnCreateGif { get; set; }
+
+    [Parameter]
+    public bool IsCreatingGif { get; set; }
+
+    [Parameter]
+    public bool IsExtracting { get; set; }
+
+    [Parameter]
+    public string? GifPath { get; set; }
+
+    private int selectedStartSubtitleTime;
+    private int selectedEndSubtitleTime;
+    private float totalDurationInSeconds;
+
+    protected override void OnParametersSet()
+    {
+        base.OnParametersSet();
+        totalDurationInSeconds = (float)TotalDuration.TotalSeconds;
+    }
+
+    private string GetStartWidthPercentage()
+    {
+        if (totalDurationInSeconds == 0) return "0%";
+        return $"{((selectedStartSubtitleTime / 1000.0 / totalDurationInSeconds) * 100):0.##}%";
+    }
+
+    private string GetDurationWidthPercentage()
+    {
+        if (totalDurationInSeconds == 0) return "0%";
+        return $"{(((selectedEndSubtitleTime - selectedStartSubtitleTime) / 1000.0 / totalDurationInSeconds) * 100):0.##}%";
+    }
+
+    private string startSubtitleTimeString
+    {
+        get => TimeSpan.FromMilliseconds(selectedStartSubtitleTime).ToString(@"hh\:mm\:ss\:fff");
+        set
+        {
+            if (TimeSpan.TryParseExact(value, @"hh\:mm\:ss\:fff", null, out var time))
+            {
+                selectedStartSubtitleTime = (int)time.TotalMilliseconds;
+            }
+        }
+    }
+
+    private string endSubtitleTimeString
+    {
+        get => TimeSpan.FromMilliseconds(selectedEndSubtitleTime).ToString(@"hh\:mm\:ss\:fff");
+        set
+        {
+            if (TimeSpan.TryParseExact(value, @"hh\:mm\:ss\:fff", null, out var time))
+            {
+                selectedEndSubtitleTime = (int)time.TotalMilliseconds;
+            }
+        }
+    }
+
+    private async Task OnCreateGifClicked()
+    {
+        await OnCreateGif.InvokeAsync((selectedStartSubtitleTime, selectedEndSubtitleTime));
+    }
+
+    private void HandleStartSubtitleChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e?.Value?.ToString(), out var startTime))
+        {
+            selectedStartSubtitleTime = startTime;
+            startSubtitleTimeString = FormatTimeSpanAsString(TimeSpan.FromMilliseconds(startTime));
+        }
+    }
+
+    private void HandleEndSubtitleChange(ChangeEventArgs e)
+    {
+        if (int.TryParse(e?.Value?.ToString(), out var endTime))
+        {
+            selectedEndSubtitleTime = endTime;
+            endSubtitleTimeString = FormatTimeSpanAsString(TimeSpan.FromMilliseconds(endTime));
+        }
+    }
+
+    private void HandleStartSubtitleTimeChange(ChangeEventArgs e)
+    {
+        if (TimeSpan.TryParseExact(e?.Value?.ToString(), @"hh\:mm\:ss\:fff", CultureInfo.InvariantCulture, out var time))
+        {
+            selectedStartSubtitleTime = (int)time.TotalMilliseconds;
+            startSubtitleTimeString = FormatTimeSpanAsString(time);
+        }
+    }
+
+    private void HandleEndSubtitleTimeChange(ChangeEventArgs e)
+    {
+        if (TimeSpan.TryParseExact(e?.Value?.ToString(), @"hh\:mm\:ss\:fff", CultureInfo.InvariantCulture, out var time))
+        {
+            selectedEndSubtitleTime = (int)time.TotalMilliseconds;
+            endSubtitleTimeString = FormatTimeSpanAsString(time);
+        }
+    }
+
+    private string FormatTimeSpanAsString(TimeSpan timeSpan)
+    {
+        return timeSpan.ToString(@"hh\:mm\:ss\:fff");
+    }
+
+    public void SetSubtitleTimes(int startTime, int endTime)
+    {
+        selectedStartSubtitleTime = startTime;
+        selectedEndSubtitleTime = endTime;
+        startSubtitleTimeString = FormatTimeSpanAsString(TimeSpan.FromMilliseconds(startTime));
+        endSubtitleTimeString = FormatTimeSpanAsString(TimeSpan.FromMilliseconds(endTime));
+        StateHasChanged();
+    }
+
+}

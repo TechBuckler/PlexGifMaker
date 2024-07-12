@@ -2,590 +2,430 @@
 @page "/index"
 @using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
 @using PlexGifMaker.Data
+@using PlexGifMaker.Pages.Components
+@using System.Globalization
+@using SubtitlesParser.Classes
 @inject NavigationManager NavigationManager
 @inject ProtectedLocalStorage ProtectedLocalStorage
 @inject PlexService PlexService
 @inject ILogger<Index> _logger
-@using SubtitlesParser
-@using SubtitlesParser.Classes;
-@using System.Globalization
-@using System.Web
 
-@if (!string.IsNullOrEmpty(errorMessage))
-{
-    <div class="alert alert-danger">
-        @errorMessage
-    </div>
-}
+@namespace PlexGifMaker.Data
 
 <h3>Select Library, TV Show, Episode, and Subtitle Segment</h3>
 
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
 @if (isLoading)
 {
-    <div class="text-center">
-        <div class="spinner-border" role="status">
-            <span class="sr-only">Loading...</span>
-        </div>
-    </div>
+    <LoadingSpinner />
 }
 else
 {
-    <div class="form-group">
-        <label for="library">Library: </label>
-        <select class="form-control" id="library" value="@selectedLibraryKey" @onchange="HandleLibraryChange">
-            <option value="">Select a library</option>
-            @if(libraries is not null)
-            {
-            @foreach (var library in libraries)
-            {
-                <option value="@library.Id">@library.Title</option>
-            }
-            }
-        </select>
-    </div>
+    <LibrarySelector Libraries="libraries" OnLibrarySelected="@HandleLibraryChange" />
 
-    @if (shows != null && shows.Any() && isShowStructure)
+    @if (shows != null && shows.Any())
     {
-        <div class="form-group">
-            <label for="show">TV Show: </label>
-            <select class="form-control" id="show" value="@selectedShowKey" @onchange="HandleShowChange">
-                <option value="">Select a TV show</option>
-                @foreach (var show in shows)
-                {
-                    <option value="@show.Id">@show.Title</option>
-                }
-            </select>
-        </div>
+        <ShowSelector Shows="shows" OnShowSelected="@HandleShowChange" />
     }
 
-    @if (episodes != null && episodes.Any() && episodes.All(x => !x.IsMovie))
+    @if (episodes != null && episodes.Any())
     {
-        <div class="form-group">
-            <label for="episode">Episode: </label>
-            <select class="form-control" id="episode" value="@selectedEpisode" @onchange="HandleEpisodeChange">
-                <option value="">Select an episode</option>
-                @foreach (var episode in episodes)
-                {
-                    <option value="@episode.Id">@episode.Title</option>
-                }
-            </select>
-            @* <button class="btn btn-success mt-2" @onclick="DownloadSubtitles">Download Subtitles</button> *@
-        </div>
-    }
-    else if (episodes != null && episodes.Any() && episodes.All(x => x.IsMovie))
-    {
-        <div class="form-group">
-            <label for="episode">Movie: </label>
-            <select class="form-control" id="episode" value="@selectedEpisode" @onchange="HandleEpisodeChange">
-                <option value="">Select a Movie</option>
-                @foreach (var episode in episodes)
-                {
-                    <option value="@episode.Id">@episode.Title</option>
-                }
-            </select>
-            @* <button class="btn btn-success mt-2" @onclick="DownloadSubtitles">Download Subtitles</button> *@
-        </div>
-    }
-    @if(subtitleOptions != null && subtitleOptions.Any())
-    {
-        <div class="form-group">
-            <label for="subtitle">Subtitle Stream: </label>
-            <select class="form-control" id="subtitle" @onchange="HandleSubtitleOptionChange">
-                <option value="">Select a subtitle</option>
-                @foreach (var subtitle in subtitleOptions.Select((value, index) => new { Value = value, Index = index }))
-                {
-                    <option value="@(string.IsNullOrEmpty(subtitle?.Value?.Key) ? subtitle?.Index.ToString() : subtitle.Value.Key)">
-                        @subtitle?.Value?.Language - @subtitle?.Value?.DisplayTitle
-                    </option>
-                }
-            </select>
-        </div>
-
+        <EpisodeSelector Episodes="episodes" OnEpisodeSelected="@HandleEpisodeChange" />
     }
 
-
-    @if (selectedEpisode != null && subtitles != null && subtitles.Any())
+    @if (subtitleOptions != null && subtitleOptions.Any())
     {
-    <div class="form-group">
-        <label for="startSubtitle">Start Subtitle: </label>
-        <select class="form-control" id="startSubtitle" @onchange="HandleStartSubtitleChange">
-            <option value="">Select a start subtitle</option>
-            @foreach (var subtitle in subtitles)
-            {
-                <option value="@subtitle.StartTime">@subtitle.ToString()</option>
-            }
-        </select>
-    </div>
-
-    <div class="form-group">
-        <label for="endSubtitle">End Subtitle: </label>
-        <select class="form-control" id="endSubtitle" @onchange="HandleEndSubtitleChange">
-            <option value="">Select an end subtitle</option>
-            @foreach (var subtitle in subtitles)
-            {
-                <option value="@subtitle.EndTime">@subtitle.ToString()</option>
-            }
-        </select>
-    </div>
+        <SubtitleSelector SubtitleOptions="subtitleOptions" OnSubtitleSelected="@HandleSubtitleOptionChange" />
     }
+
     @if (!string.IsNullOrEmpty(selectedEpisode) || !subsFound)
     {
-            <!-- Timeline for visualizing subtitles within the movie -->
-        <div class="timeline-container">
-            <h5>Subtitle Timeline:</h5>
-                <div class="progress bg-primary">
-                    <div class="progress-bar bg-primary" role="progressbar"
-                         style="width: @((selectedStartSubtitleTime / 1000.0 / totalDuration.TotalSeconds) * 100)%"
-                         aria-valuenow="@(selectedStartSubtitleTime / 1000.0)" aria-valuemin="0" aria-valuemax="@totalDuration.TotalSeconds">
-                    </div>
-                    <div class="progress-bar bg-warning" role="progressbar"
-                         style="width: @(((selectedEndSubtitleTime - selectedStartSubtitleTime) / 1000.0 / totalDuration.TotalSeconds) * 100)%"
-                         aria-valuenow="@((selectedEndSubtitleTime - selectedStartSubtitleTime) / 1000.0)" aria-valuemin="@(selectedStartSubtitleTime / 1000.0)" aria-valuemax="@totalDuration.TotalSeconds">
-                    </div>
-                </div>
-        </div>
-            <div>
-                <label for="startSubtitleTime">Start Subtitle Time (ms):</label>
-                <input type="text" id="startSubtitleTime" value="@startSubtitleTimeString" @onchange="HandleStartSubtitleTimeChange" class="form-control" />
-
-                <label for="endSubtitleTime">End Subtitle Time (ms):</label>
-                <input type="text" id="endSubtitleTime" value="@endSubtitleTimeString" @onchange="HandleEndSubtitleTimeChange" class="form-control" />
-            </div>
-            <button class="btn btn-primary mt-3" @onclick="CreateGif" disabled="@isCreatingGif">Create GIF</button>
+        <GifCreator SelectedEpisode="selectedEpisode"
+                    Subtitles="subtitles"
+                    TotalDuration="totalDuration"
+                    OnCreateGif="CreateGif"
+                    IsCreatingGif="isCreatingGif"
+                    IsExtracting="isExtracting"
+                    GifPath="@gifPath"
+                    @ref="gifCreatorRef" />
     }
-
-    if (isExtracting)
-    {
-        <div class="text-center">
-            <div class="spinner-border" role="status">
-                <span class="sr-only">Extracting Embedded Subtitles...</span>
-            </div>
-        </div>
-    }
-
-    @if (!string.IsNullOrEmpty(gifPath))
-    {
-        <div>
-            <h3>Generated GIF:</h3>
-            <img src="@gifPath" class="img-fluid" alt="Generated GIF" />
-        </div>
-    }
-    else if (isCreatingGif)
-    {
-        <div class="text-center">
-            <div class="spinner-border" role="status">
-                <span class="sr-only">Creating GIF...</span>
-            </div>
-        </div>
-    }    
 }
 
-@code {
-    private string? selectedLibraryKey;
-    private string? selectedShowKey;
-    private string? selectedEpisode;
-    private string? selectedSubtitleOptionKey;
-    private List<Library>? libraries;
-    private List<Episode>? shows;
-    private List<Episode>? episodes;
-    private bool isLoading = true;
-    private bool isShowStructure = true; // Add this flag
-    private List<SubtitleItem>? subtitles;
-    private string? gifPath; // Variable to store the path of the generated GIF
-    private bool isCreatingGif = false;
-    private bool isExtracting = false;
-    private string? errorMessage;
-    private TimeSpan totalDuration;
-    float totalDurationInSeconds;
-    private bool subsFound = true; //default to true so it doesn't show the warning message if subs are not found
-    private List<PlexService.Subtitle?>? subtitleOptions;
+    @code {
+        private string? selectedLibraryKey;
+        private string? selectedShowKey;
+        private string? selectedEpisode;
+        private string? selectedSubtitleOptionKey;
+        private List<Library>? libraries;
+        private List<Episode>? shows;
+        private List<Episode>? episodes;
+        private bool isLoading = true;
+        private List<SubtitleItem>? subtitles;
+        private string? gifPath;
+        private bool isCreatingGif = false;
+        private bool isExtracting = false;
+        private string? errorMessage;
+        private TimeSpan totalDuration;
+        float totalDurationInSeconds;
+        private bool subsFound = true;
+        private List<Subtitle?>? subtitleOptions;
 
-    private string startSubtitleTimeString
-    {
-        get => TimeSpan.FromMilliseconds(selectedStartSubtitleTime).ToString(@"hh\:mm\:ss\:fff");
-        set
+        private GifCreator? gifCreatorRef;
+
+        private async Task CreateGif((int startTime, int endTime) times)
         {
-            if (TimeSpan.TryParseExact(value, @"hh\:mm\:ss\:fff", null, out var time))
+            if (string.IsNullOrEmpty(selectedEpisode))
             {
-                selectedStartSubtitleTime = (int)time.TotalMilliseconds;
+                errorMessage = "Please select all the necessary options before creating a GIF.";
+                StateHasChanged();
+                return;
             }
-        }
-    }
 
-    private string endSubtitleTimeString
-    {
-        get => TimeSpan.FromMilliseconds(selectedEndSubtitleTime).ToString(@"hh\:mm\:ss\:fff");
-        set
-        {
-            if (TimeSpan.TryParseExact(value, @"hh\:mm\:ss\:fff", null, out var time))
-            {
-                selectedEndSubtitleTime = (int)time.TotalMilliseconds;
-            }
-        }
-    }
-    private int selectedStartSubtitleTime;
-    private int selectedEndSubtitleTime;
-
-    // Properties for display purposes (formatted as TimeSpan)
-    private string startSubtitleTimeDisplay
-    {
-        get => TimeSpan.FromMilliseconds(selectedStartSubtitleTime).ToString(@"hh\:mm\:ss\:fff");
-        set
-        {
-            if (TimeSpan.TryParse(value, out var time))
-            {
-                selectedStartSubtitleTime = (int)time.TotalMilliseconds;
-            }
-        }
-    }
-
-    private string endSubtitleTimeDisplay
-    {
-        get => TimeSpan.FromMilliseconds(selectedEndSubtitleTime).ToString(@"hh\:mm\:ss\:fff");
-        set
-        {
-            if (TimeSpan.TryParse(value, out var time))
-            {
-                selectedEndSubtitleTime = (int)time.TotalMilliseconds;
-            }
-        }
-    }
-
-    private void HandleStartSubtitleTimeChange(ChangeEventArgs e)
-    {
-        if (TimeSpan.TryParseExact(e?.Value?.ToString(), @"hh\:mm\:ss\:fff", CultureInfo.InvariantCulture, out var time))
-        {
-            selectedStartSubtitleTime = (int)time.TotalMilliseconds;
-            startSubtitleTimeString = FormatTimeSpanAsString(time);
-        }
-        else
-        {
-            // Handle parse error if necessary
-        }
-    }
-
-    private void HandleEndSubtitleTimeChange(ChangeEventArgs e)
-    {
-        if (TimeSpan.TryParseExact(e?.Value?.ToString(), @"hh\:mm\:ss\:fff", CultureInfo.InvariantCulture, out var time))
-        {
-            selectedEndSubtitleTime = (int)time.TotalMilliseconds;
-            endSubtitleTimeString = FormatTimeSpanAsString(time);
-        }
-        else
-        {
-            // Handle parse error if necessary
-        }
-    }
-
-    // This method formats a TimeSpan to a string, including milliseconds.
-    private string FormatTimeSpanAsString(TimeSpan timeSpan)
-    {
-        return timeSpan.ToString(@"hh\:mm\:ss\:fff");
-    }
-
-    // This method parses a string to a TimeSpan. Make sure to include milliseconds in the parsing.
-    private TimeSpan ParseStringAsTimeSpan(string timeString)
-    {
-        return TimeSpan.TryParseExact(timeString, @"hh\:mm\:ss\:fff", CultureInfo.InvariantCulture, out var time)
-            ? time
-            : TimeSpan.Zero; // Return zero or handle the error as needed.
-    }
-
-    private void OnStartSubtitleTimeChanged(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var newTime))
-        {
-            selectedStartSubtitleTime = newTime;
-            // Perform further actions if needed, like updating the timeline
-        }
-    }
-
-    private void OnEndSubtitleTimeChanged(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var newTime))
-        {
-            selectedEndSubtitleTime = newTime;
-            // Perform further actions if needed, like updating the timeline
-        }
-    }
-
-    private async Task HandleSubtitleOptionChange(ChangeEventArgs e)
-    {
-        var value = e.Value?.ToString();
-        if (!string.IsNullOrEmpty(value))
-        {
-            if (int.TryParse(value, out var index))
-            {
-                // The value is an index
-                selectedSubtitleOptionKey = index.ToString();
-            }
-            else
-            {
-                // The value is a key
-                selectedSubtitleOptionKey = value;                
-            }
-            await setSubtitles();
-        }
-        else
-        {
-            _logger.LogWarning("OnSubtitleOptionChange received a null or invalid ChangeEventArgs.");
-        }
-    }
-
-
-    // private async Task DownloadSubtitles()
-    // {
-    //     isLoading = true;
-    //     StateHasChanged();
-
-    //     try
-    //     {
-    //         await PlexService.FetchSubtitlesAsync(selectedEpisode);
-    //         await setSubtitles(e);
-    //     }
-    //     catch (Exception ex)
-    //     {
-    //         _logger.LogError($"Error downloading subtitles: {ex.Message}");
-    //         errorMessage = "An error occurred while downloading subtitles.";
-    //     }
-    //     finally
-    //     {
-    //         isLoading = false;
-    //         StateHasChanged();
-    //     }
-    // }
-
-
-    private async Task CreateGif()
-    {
-        // Check if all the necessary selections have been made before starting GIF creation
-        if (string.IsNullOrEmpty(selectedEpisode) || selectedEndSubtitleTime == 0)
-        {
-            // Notify user to make the necessary selections
-            errorMessage = "Please select all the necessary options before creating a GIF.";
+            isCreatingGif = true;
+            errorMessage = null;
+            gifPath = null;
             StateHasChanged();
-            return;
-        }
 
-        // Indicate that the GIF creation process is starting
-        isCreatingGif = true;
-        StateHasChanged();
-
-        try
-        {
-            // Call the method to create a GIF from the selected episode and subtitle timings
-            if(selectedSubtitleOptionKey != null)
+            try
             {
-                gifPath = await PlexService.CreateGifFromSubtitlesAsync(selectedEpisode, selectedStartSubtitleTime, selectedEndSubtitleTime, selectedSubtitleOptionKey);
+                string? newGifPath;
+                if (selectedSubtitleOptionKey != null)
+                {
+                    newGifPath = await PlexService.CreateGifFromSubtitlesAsync(selectedEpisode, times.startTime, times.endTime, selectedSubtitleOptionKey);
+                }
+                else
+                {
+                    newGifPath = await PlexService.CreateGifFromSubtitlesAsync(selectedEpisode, times.startTime, times.endTime);
+                }
+
+                if (!string.IsNullOrEmpty(newGifPath))
+                {
+                    // Ensure the GifPath starts with a forward slash for web URLs
+                    gifPath = gifPath?.Replace(@"/wwwroot", "");
+                    gifPath = newGifPath.StartsWith("/") ? newGifPath : "/" + newGifPath;
+                    _logger.LogInformation($"GIF created successfully. Path: {gifPath}");
+                }
+                else
+                {
+                    errorMessage = "Failed to generate GIF. The service returned an empty path.";
+                    _logger.LogWarning("GIF creation failed. Empty path returned from service.");
+                }
             }
-            else
+            catch (Exception ex)
             {
-                gifPath = await PlexService.CreateGifFromSubtitlesAsync(selectedEpisode, selectedStartSubtitleTime, selectedEndSubtitleTime);
-            }            
+                _logger.LogError(ex, "Error creating GIF");
+                errorMessage = "An error occurred while creating the GIF. Please try again.";
+                gifPath = null;
+            }
+            finally
+            {
+                isCreatingGif = false;
+                StateHasChanged();
+            }
         }
-        finally
+
+        // When you need to set subtitle times from the parent component:
+        private void SetSubtitleTimes(int startTime, int endTime)
         {
-            // GIF creation is complete, update the UI
-            isCreatingGif = false;
+            gifCreatorRef?.SetSubtitleTimes(startTime, endTime);
+        }
+
+        private string startSubtitleTimeString
+        {
+            get => TimeSpan.FromMilliseconds(selectedStartSubtitleTime).ToString(@"hh\:mm\:ss\:fff");
+            set
+            {
+                if (TimeSpan.TryParseExact(value, @"hh\:mm\:ss\:fff", null, out var time))
+                {
+                    selectedStartSubtitleTime = (int)time.TotalMilliseconds;
+                }
+            }
+        }
+
+        private string endSubtitleTimeString
+        {
+            get => TimeSpan.FromMilliseconds(selectedEndSubtitleTime).ToString(@"hh\:mm\:ss\:fff");
+            set
+            {
+                if (TimeSpan.TryParseExact(value, @"hh\:mm\:ss\:fff", null, out var time))
+                {
+                    selectedEndSubtitleTime = (int)time.TotalMilliseconds;
+                }
+            }
+        }
+        private int selectedStartSubtitleTime;
+        private int selectedEndSubtitleTime;
+
+        protected override async Task OnAfterRenderAsync(bool firstRender)
+        {
+            if (firstRender)
+            {
+                await InitializeSettingsAndLibraries();
+            }
+        }
+
+        private async Task InitializeSettingsAndLibraries()
+        {
+            var baseUriResult = await ProtectedLocalStorage.GetAsync<string>("PlexBaseUri");
+            var tokenResult = await ProtectedLocalStorage.GetAsync<string>("PlexToken");
+
+            if (!baseUriResult.Success || string.IsNullOrWhiteSpace(baseUriResult.Value) ||
+                !tokenResult.Success || string.IsNullOrWhiteSpace(tokenResult.Value))
+            {
+                _logger.LogWarning("Base URI or token is missing in local storage. Redirecting to settings.");
+                NavigationManager.NavigateTo("/settings");
+                return;
+            }
+
+            PlexService.SetConfiguration(baseUriResult.Value!, tokenResult.Value!);
+
+            try
+            {
+                libraries = await PlexService.GetLibrariesAsync();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                errorMessage = "Your Plex session may have expired or you may not have the necessary permissions. Please try re-authenticating.";
+                NavigationManager.NavigateTo("/settings");
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to fetch libraries");
+                errorMessage = "An error occurred while fetching your Plex libraries. Please try again later.";
+            }
+            finally
+            {
+                isLoading = false;
+                StateHasChanged();
+            }
+        }
+
+        private async Task HandleLibraryChange(string libraryKey)
+        {
+            selectedLibraryKey = libraryKey ?? string.Empty;
+            try
+            {
+                var content = await PlexService.GetShowsAsync(selectedLibraryKey);
+                if (content == null || !content.Any())
+                {
+                    _logger.LogWarning("No content found in library {LibraryKey}", selectedLibraryKey);
+                    shows = new List<Episode>();
+                    episodes = new List<Episode>();
+                }
+                else
+                {
+                    // Check if the library contains movies
+                    if (content.Any(item => item.IsMovie))
+                    {
+                        // This is a movie library
+                        episodes = content.Where(item => item.IsMovie).ToList();
+                        shows = null; // Set shows to null for movie libraries
+                    }
+                    else
+                    {
+                        // This is a TV show library
+                        shows = content.Where(item => !item.IsMovie).ToList();
+                        episodes = null; // Set episodes to null for TV show libraries
+                    }
+                }
+
+                selectedEpisode = null;
+                selectedShowKey = null;
+                selectedSubtitleOptionKey = null;
+                subtitles = null;
+                subtitleOptions = null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching content for library {LibraryKey}", selectedLibraryKey);
+                errorMessage = "An error occurred while fetching content. Please try again.";
+            }
             StateHasChanged();
         }
-    }
 
-    private void HandleStartSubtitleChange(ChangeEventArgs e)
-    {
-        if (e?.Value != null && int.TryParse(e.Value.ToString(), out var result))
+        private async Task HandleShowChange(string showKey)
         {
-            selectedStartSubtitleTime = result;
-        }
-        else
-        {
-            _logger.LogWarning("HandleStartSubtitleChange received a null or invalid ChangeEventArgs.");
-            // Handle the case where e.Value is null or not a valid integer string.
-            // For example, you might want to set selectedStartSubtitleTime to a default value or log a warning.
-        }
-    }
-
-    private void HandleEndSubtitleChange(ChangeEventArgs e)
-    {
-        if (e?.Value != null && int.TryParse(e.Value.ToString(), out var result))
-        {
-            selectedEndSubtitleTime = result;
-        }
-        else
-        {
-            _logger.LogWarning("HandleEndSubtitleChange received a null or invalid ChangeEventArgs.");
-            // Handle the case where e.Value is null or not a valid integer string.
-            // For example, you might want to set selectedStartSubtitleTime to a default value or log a warning.
-        }
-    }
-
-    // Utility method to determine if an item represents a show (you might need to adjust the logic based on your data structure)
-    private bool IsShowItem(Episode item)
-    {
-        // Your logic to determine if the item is a show
-        // For now, we assume all fetched items in this context are shows
-        // You might need additional metadata to make this decision
-        return true;
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            await InitializeSettingsAndLibraries();
-        }
-    }
-
-    private async Task InitializeSettingsAndLibraries()
-    {
-        var baseUriResult = await ProtectedLocalStorage.GetAsync<string>("PlexBaseUri");
-        var tokenResult = await ProtectedLocalStorage.GetAsync<string>("PlexToken");
-
-        // Check both baseUriResult and tokenResult for success and null or whitespace values
-        if (!baseUriResult.Success || string.IsNullOrWhiteSpace(baseUriResult.Value) ||
-            !tokenResult.Success || string.IsNullOrWhiteSpace(tokenResult.Value))
-        {
-            // Log the error or handle it as needed
-            _logger.LogWarning("Base URI or token is missing in local storage. Redirecting to settings.");
-            NavigationManager.NavigateTo("/settings");
-            return;
-        }
-
-        // At this point, baseUriResult.Value and tokenResult.Value are confirmed to be not null or whitespace
-        // Safe to use them for setting configuration
-        PlexService.SetConfiguration(baseUriResult.Value!, tokenResult.Value!);
-        libraries = await PlexService.GetLibrariesAsync();
-        isLoading = false;
-        StateHasChanged();
-    }
-
-    private async Task HandleLibraryChange(ChangeEventArgs e)
-    {
-        // Set selectedLibraryKey to e.Value or an empty string if e.Value is null
-        selectedLibraryKey = e?.Value?.ToString() ?? string.Empty;
-
-        // Now selectedLibraryKey is guaranteed to be non-null, though it could be empty
-        shows = await PlexService.GetShowsAsync(selectedLibraryKey);
-
-        // Handle the rest of your logic
-        if (shows == null || !shows.Any())
-        {
-            // Log warning or handle accordingly
-            shows = new List<Episode>();
-        }
-        episodes = null; // Clear episodes when changing libraries
-        selectedEpisode = null; // Clear selected episode when changing libraries
-        selectedShowKey = null;
-        selectedSubtitleOptionKey = null;
-        subtitles = null;
-        subtitleOptions = null;
-        if (shows.Any(x => x.IsMovie))
-        {
-            episodes = shows;
-            shows = new List<Episode>(); // Reset shows if they are movies
-        }
-        StateHasChanged();
-    }
-
-
-    private async Task HandleShowChange(ChangeEventArgs e)
-    {
-        episodes = null; // Clear episodes when changing shows
-                         // Ensure e.Value is not null before using it.
-        if (e?.Value != null)
-        {
-            selectedShowKey = e.Value.ToString();
-            // Proceed to call GetEpisodesAsync only if selectedShowKey is not null or empty.
+            selectedShowKey = showKey;
             if (!string.IsNullOrWhiteSpace(selectedShowKey))
             {
-                episodes = await PlexService.GetEpisodesAsync(selectedShowKey, false);
+                try
+                {
+                    episodes = await PlexService.GetEpisodesAsync(selectedShowKey, false);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error fetching episodes for show {ShowKey}", selectedShowKey);
+                    errorMessage = "An error occurred while fetching episodes. Please try again.";
+                }
             }
             else
             {
                 _logger.LogWarning("selectedShowKey is null or whitespace.");
-                // Handle the case where selectedShowKey is null or whitespace
             }
-        }
-        else
-        {
-            _logger.LogWarning("HandleShowChange received a null ChangeEventArgs.");
-        }
-        selectedEpisode = null; // Clear selected episode when changing shows        
-        subtitles = null;
-        subtitleOptions = null;        
-        selectedSubtitleOptionKey = null;
-        StateHasChanged();
-    }
-
-    private async Task HandleEpisodeChange(ChangeEventArgs e)
-    {
-        if (e?.Value != null)
-        {
-            selectedEpisode = e.Value.ToString();
-        }
-        else
-        {
-            _logger.LogWarning("HandleEpisodeChange received a null or invalid ChangeEventArgs.");
-            // Handle the case appropriately, possibly setting selectedEpisode to a default or empty value
-            return;
-        }
-        subtitles = null;
-        selectedSubtitleOptionKey = null;
-        subtitleOptions = null;
-        if (selectedEpisode != null)
-        {
-            subtitleOptions = await PlexService.GetSubtitleOptionsAsync(selectedEpisode);
-        }
-        else
-        {
-            _logger.LogWarning("Selected episode is null or empty.");
-        }
-    }
-    public async Task setSubtitles()
-    {
-        if (!string.IsNullOrEmpty(selectedEpisode))
-        {
-            // If selectedSubtitleOptionKey is not null, pass it to GetActualSubtitlesAsync
-            await PlexService.DeleteSubtitleFilesAsync();
-            if (int.TryParse(selectedSubtitleOptionKey, out int index))
-            {
-                // If parsing is successful, use the index to extract subtitles
-                isExtracting = true;
-                StateHasChanged();
-                subtitles = await PlexService.ExtractSubtitles(selectedEpisode, index);
-            }
-            else
-            {
-                // If parsing fails, treat selectedSubtitleOptionKey as a string key
-                if (selectedSubtitleOptionKey != null)
-                {
-                    subtitles = await PlexService.GetActualSubtitlesAsync(selectedEpisode, selectedSubtitleOptionKey);
-                }
-            }
-            isExtracting = false;
-
-            totalDuration = await PlexService.GetEpisodeDurationAsync(selectedEpisode);
-            totalDurationInSeconds = (float)totalDuration.TotalSeconds;
-
-            _logger.LogInformation($"Fetched {subtitles?.Count} subtitles for episode {selectedEpisode}");
-            if (subtitles?.Count == 0)
-            {
-                subsFound = false;
-                errorMessage = "No subtitles found for the selected episode. Please enter the start and end times manually.";
-            }
-            else
-            {
-                subsFound = true;
-                errorMessage = null;
-            }
-
+            selectedEpisode = null;
+            subtitles = null;
+            subtitleOptions = null;
+            selectedSubtitleOptionKey = null;
             StateHasChanged();
         }
-        else
+
+        private async Task HandleEpisodeChange(string episodeId)
         {
-            _logger.LogWarning("Selected episode is null or empty.");
-            // Handle the case where the selectedEpisode is null or empty.
-            // This might include setting subtitles to an empty list or another default state
+            selectedEpisode = episodeId;
+            subtitles = null;
+            selectedSubtitleOptionKey = null;
+            subtitleOptions = null;
+            if (selectedEpisode != null)
+            {
+                try
+                {
+                    subtitleOptions = await PlexService.GetSubtitleOptionsAsync(selectedEpisode);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error fetching subtitle options for content {ContentId}", selectedEpisode);
+                    errorMessage = "An error occurred while fetching subtitle options. Please try again.";
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Selected content is null or empty.");
+            }
+            StateHasChanged();
         }
-    }
+
+        private async Task HandleSubtitleOptionChange(string subtitleKey)
+        {
+            if (!string.IsNullOrEmpty(subtitleKey))
+            {
+                if (int.TryParse(subtitleKey, out var index))
+                {
+                    selectedSubtitleOptionKey = index.ToString();
+                }
+                else
+                {
+                    selectedSubtitleOptionKey = subtitleKey;
+                }
+                await setSubtitles();
+            }
+            else
+            {
+                _logger.LogWarning("OnSubtitleOptionChange received a null or empty value.");
+            }
+        }
+
+
+
+        private void HandleStartSubtitleChange(ChangeEventArgs e)
+        {
+            if (e?.Value != null && int.TryParse(e.Value.ToString(), out var result))
+            {
+                selectedStartSubtitleTime = result;
+            }
+            else
+            {
+                _logger.LogWarning("HandleStartSubtitleChange received a null or invalid ChangeEventArgs.");
+            }
+        }
+
+        private void HandleEndSubtitleChange(ChangeEventArgs e)
+        {
+            if (e?.Value != null && int.TryParse(e.Value.ToString(), out var result))
+            {
+                selectedEndSubtitleTime = result;
+            }
+            else
+            {
+                _logger.LogWarning("HandleEndSubtitleChange received a null or invalid ChangeEventArgs.");
+            }
+        }
+
+        private void HandleStartSubtitleTimeChange(ChangeEventArgs e)
+        {
+            if (TimeSpan.TryParseExact(e?.Value?.ToString(), @"hh\:mm\:ss\:fff", CultureInfo.InvariantCulture, out var time))
+            {
+                selectedStartSubtitleTime = (int)time.TotalMilliseconds;
+                startSubtitleTimeString = FormatTimeSpanAsString(time);
+            }
+            else
+            {
+                _logger.LogWarning("Invalid start time format entered.");
+                errorMessage = "Please enter a valid time in the format HH:mm:ss:fff.";
+            }
+        }
+
+        private void HandleEndSubtitleTimeChange(ChangeEventArgs e)
+        {
+            if (TimeSpan.TryParseExact(e?.Value?.ToString(), @"hh\:mm\:ss\:fff", CultureInfo.InvariantCulture, out var time))
+            {
+                selectedEndSubtitleTime = (int)time.TotalMilliseconds;
+                endSubtitleTimeString = FormatTimeSpanAsString(time);
+            }
+            else
+            {
+                _logger.LogWarning("Invalid end time format entered.");
+                errorMessage = "Please enter a valid time in the format HH:mm:ss:fff.";
+            }
+        }
+
+        private string FormatTimeSpanAsString(TimeSpan timeSpan)
+        {
+            return timeSpan.ToString(@"hh\:mm\:ss\:fff");
+        }
+
+        private async Task setSubtitles()
+        {
+            if (!string.IsNullOrEmpty(selectedEpisode))
+            {
+                try
+                {
+                    await PlexService.DeleteSubtitleFilesAsync();
+                    if (int.TryParse(selectedSubtitleOptionKey, out int index))
+                    {
+                        isExtracting = true;
+                        StateHasChanged();
+                        subtitles = await PlexService.ExtractSubtitles(selectedEpisode, index);
+                    }
+                    else if (selectedSubtitleOptionKey != null)
+                    {
+                        subtitles = await PlexService.GetActualSubtitlesAsync(selectedEpisode, selectedSubtitleOptionKey);
+                    }
+
+                    totalDuration = await PlexService.GetEpisodeDurationAsync(selectedEpisode);
+                    totalDurationInSeconds = (float)totalDuration.TotalSeconds;
+
+                    _logger.LogInformation($"Fetched {subtitles?.Count} subtitles for episode {selectedEpisode}");
+                    if (subtitles?.Count == 0)
+                    {
+                        subsFound = false;
+                        errorMessage = "No subtitles found for the selected episode. Please enter the start and end times manually.";
+                    }
+                    else
+                    {
+                        subsFound = true;
+                        errorMessage = null;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error fetching subtitles for episode {EpisodeId}", selectedEpisode);
+                    errorMessage = "An error occurred while fetching subtitles. Please try again.";
+                }
+                finally
+                {
+                    isExtracting = false;
+                    StateHasChanged();
+                }
+            }
+            else
+            {
+                _logger.LogWarning("Selected episode is null or empty.");
+                errorMessage = "Please select an episode before fetching subtitles.";
+            }
+        }
 }

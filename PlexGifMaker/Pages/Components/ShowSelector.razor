@@ -1,0 +1,25 @@
+﻿@using PlexGifMaker.Data
+
+<div class="form-group">
+    <label for="show">TV Show: </label>
+    <select class="form-control" id="show" @onchange="OnSelectedShowChanged">
+        <option value="">Select a TV show</option>
+        @foreach (var show in Shows)
+        {
+            <option value="@show.Id">@show.Title</option>
+        }
+    </select>
+</div>
+
+@code {
+    [Parameter]
+    public List<Episode> Shows { get; set; } = new List<Episode>();
+
+    [Parameter]
+    public EventCallback<string> OnShowSelected { get; set; }
+
+    private async Task OnSelectedShowChanged(ChangeEventArgs e)
+    {
+        await OnShowSelected.InvokeAsync(e.Value?.ToString());
+    }
+}

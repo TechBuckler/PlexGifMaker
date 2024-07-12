@@ -11,16 +11,16 @@ namespace PlexGifMaker.Data
         private readonly IHttpClientFactory _httpClientFactory;
         private string? _baseUri;
         private string? _token;
-        private readonly string subtitlePath = Path.Combine(Directory.GetCurrentDirectory(), "subtitles");
+        private readonly string subtitlePath;
 
         public PlexService(IHttpClientFactory httpClientFactory, ILogger<PlexService> logger)
         {
             _httpClientFactory = httpClientFactory;
-            _logger = logger; // Initialize the logger
+            _logger = logger;
             subtitlePath = Path.Combine(Directory.GetCurrentDirectory(), "subtitles")
                        ?? throw new InvalidOperationException("Subtitle path cannot be determined.");
-
         }
+
         public void SetConfiguration(string baseUri, string token)
         {
             if (!Uri.IsWellFormedUriString(baseUri, UriKind.Absolute))
@@ -32,7 +32,69 @@ namespace PlexGifMaker.Data
             _token = token;
         }
 
-        // Fetches the list of episodes from a specific show or library
+        public async Task<List<Library>> GetLibrariesAsync()
+        {
+            var libraries = new List<Library>();
+            var client = _httpClientFactory.CreateClient();
+            var requestUri = $"{_baseUri}/library/sections?X-Plex-Token={_token}";
+
+            try
+            {
+                var response = await client.GetAsync(requestUri);
+
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    _logger.LogWarning("Unauthorized access attempt. Token may be invalid or expired.");
+                    throw new UnauthorizedAccessException("Unable to access Plex libraries. Your session may have expired or you may not have the necessary permissions.");
+                }
+
+                response.EnsureSuccessStatusCode();
+
+                var content = await response.Content.ReadAsStringAsync();
+                var doc = new XmlDocument();
+                doc.LoadXml(content);
+
+                var directoryNodes = doc.SelectNodes("//Directory");
+                if (directoryNodes != null)
+                {
+                    foreach (XmlNode node in directoryNodes)
+                    {
+                        var id = node.Attributes?["key"]?.Value ?? string.Empty;
+                        var title = node.Attributes?["title"]?.Value ?? "Untitled";
+                        var type = node.Attributes?["type"]?.Value ?? "Unknown";
+
+                        libraries.Add(new Library
+                        {
+                            Id = id,
+                            Title = title,
+                            Type = type
+                        });
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("No library directories found in Plex response.");
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "HTTP request error while fetching libraries");
+                throw;
+            }
+            catch (XmlException ex)
+            {
+                _logger.LogError(ex, "XML parsing error while processing Plex response");
+                throw;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error while fetching libraries");
+                throw;
+            }
+
+            return libraries;
+        }
+
         public async Task<List<Episode>> GetEpisodesAsync(string libraryKey, bool IsMovie)
         {
             var episodes = new List<Episode>();
@@ -67,18 +129,26 @@ namespace PlexGifMaker.Data
                         _logger.LogWarning("No episodes found in library {LibraryKey}", libraryKey);
                     }
                 }
+                else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    _logger.LogWarning("Unauthorized access attempt for library {LibraryKey}. Token may be invalid or user may lack permissions.", libraryKey);
+                    throw new UnauthorizedAccessException($"Unable to access library {libraryKey}. Your session may have expired or you may not have the necessary permissions.");
+                }
                 else
                 {
                     _logger.LogError("Failed to fetch episodes from library {LibraryKey}. Status code: {StatusCode}", libraryKey, response.StatusCode);
+                    throw new HttpRequestException($"Failed to fetch episodes. Status code: {response.StatusCode}");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError("Failed to fetch episodes from library {LibraryKey}. Error Message: {ErrorMessage}", libraryKey, ex.Message);
+                _logger.LogError(ex, "Failed to fetch episodes from library {LibraryKey}", libraryKey);
+                throw;
             }
 
             return episodes;
         }
+
         public string? ExtractMediaPartInfo(string xmlContent)
         {
             XDocument doc = XDocument.Parse(xmlContent);
@@ -102,6 +172,7 @@ namespace PlexGifMaker.Data
             }
             return null;
         }
+
         public async Task<List<Subtitle?>> GetSubtitleOptionsAsync(string episodeId)
         {
             var client = _httpClientFactory.CreateClient();
@@ -123,7 +194,6 @@ namespace PlexGifMaker.Data
 
                     if (subtitleNodes != null)
                     {
-
                         foreach (XmlNode node in subtitleNodes)
                         {
                             var subtitle = new Subtitle
@@ -141,14 +211,21 @@ namespace PlexGifMaker.Data
                         _logger.LogInformation("No English subtitles found for episode {EpisodeId}.", episodeId);
                     }
                 }
+                else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    _logger.LogWarning("Unauthorized access attempt for episode {EpisodeId}. Token may be invalid or user may lack permissions.", episodeId);
+                    throw new UnauthorizedAccessException($"Unable to access episode {episodeId}. Your session may have expired or you may not have the necessary permissions.");
+                }
                 else
                 {
                     _logger.LogError("Failed to fetch metadata for episode {EpisodeId}. Status code: {StatusCode}", episodeId, response.StatusCode);
+                    throw new HttpRequestException($"Failed to fetch episode metadata. Status code: {response.StatusCode}");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError("An error occurred while fetching subtitles for episode {EpisodeId}: {ErrorMessage}", episodeId, ex.Message);
+                _logger.LogError(ex, "An error occurred while fetching subtitles for episode {EpisodeId}", episodeId);
+                throw;
             }
             return subtitles;
         }
@@ -202,18 +279,24 @@ namespace PlexGifMaker.Data
 
                     return items;
                 }
+                else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    _logger.LogWarning("Unauthorized access attempt for subtitles of episode {EpisodeId}. Token may be invalid or user may lack permissions.", episodeId);
+                    throw new UnauthorizedAccessException($"Unable to access subtitles for episode {episodeId}. Your session may have expired or you may not have the necessary permissions.");
+                }
                 else
                 {
                     _logger.LogError("Failed to fetch subtitles for episode {EpisodeId}. Status code: {StatusCode}", episodeId, response.StatusCode);
-                    return new List<SubtitleItem>();
+                    throw new HttpRequestException($"Failed to fetch subtitles. Status code: {response.StatusCode}");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError("An error occurred while fetching subtitles for episode {EpisodeId}: {ErrorMessage}", episodeId, ex.Message);
-                return new List<SubtitleItem>();
+                _logger.LogError(ex, "An error occurred while fetching subtitles for episode {EpisodeId}", episodeId);
+                throw;
             }
         }
+
         public async Task<string?> CreateGifFromSubtitlesAsync(string episodeId, int startSubtitleTime, int endSubtitleTime, string selectedKey = "")
         {
             var startTime = TimeSpan.FromMilliseconds(startSubtitleTime);
@@ -231,6 +314,11 @@ namespace PlexGifMaker.Data
 
             if (!response.IsSuccessStatusCode)
             {
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    _logger.LogWarning("Unauthorized access attempt for episode {EpisodeId}. Token may be invalid or user may lack permissions.", episodeId);
+                    throw new UnauthorizedAccessException($"Unable to access episode {episodeId}. Your session may have expired or you may not have the necessary permissions.");
+                }
                 _logger.LogError("Failed to fetch video metadata for episode {EpisodeId}. Status code: {StatusCode}", episodeId, response.StatusCode);
                 return null;
             }
@@ -257,7 +345,14 @@ namespace PlexGifMaker.Data
             string videoFile = $"{_baseUri}{key}?X-Plex-Token={_token}";
 
             var outputPath = await GenerateGifAsync(videoFile, subtitleKey, startTime, duration, episodeId);
-            return outputPath?.Replace("wwwroot", string.Empty);
+            if (outputPath != null)
+            {
+                // Convert the full path to a relative path
+                var relativePath = outputPath.Replace(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "");
+                // Ensure the path uses forward slashes for web URLs
+                return relativePath.Replace("\\", "/");
+            }
+            return null;
         }
 
         public async Task DeleteSubtitleFilesAsync(string fileName = "")
@@ -311,7 +406,7 @@ namespace PlexGifMaker.Data
                 filters = $"fps=20,scale=400:-1:flags=lanczos,{subtitleStream}";
             }
 
-            var ffmpegCommand = $"-report -v debug -y -i \"{videoFile}\" -ss {startTime} -t {duration} -r 10 -lavfi \"{filters}\" -map \"[v]\" -c:v gif \"{outputPath}\"";
+            var ffmpegCommand = $"-report -v debug -i \"{videoFile}\" -ss {startTime} -t {duration} -r 10 -lavfi \"{filters}\" -map \"[v]\" -c:v gif \"{outputPath}\"";
             _logger.LogInformation("Executing FFmpeg command: {FfmpegCommand}", ffmpegCommand);
 
             using (var process = new Process())
@@ -332,27 +427,29 @@ namespace PlexGifMaker.Data
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
                 await process.WaitForExitAsync();
-
                 if (process.ExitCode != 0)
                 {
                     _logger.LogError("FFmpeg encountered an error: {ErrorOutput}", error.ToString());
                     return null;
                 }
-            }
 
+                // Check if the file was actually created
+                if (!File.Exists(outputPath))
+                {
+                    _logger.LogError("FFmpeg did not create the output file: {OutputPath}", outputPath);
+                    return null;
+                }
+            }
             return outputPath;
         }
 
         private static string EnsureUniqueFilename(string originalPath)
         {
-            // Get the directory name and ensure it's not null or empty.
-            // If it is, set a default directory or handle as needed.
-            string directory = Path.GetDirectoryName(originalPath) ?? "DefaultDirectory"; // Adjust "DefaultDirectory" as needed.
+            string directory = Path.GetDirectoryName(originalPath) ?? "DefaultDirectory";
             string filenameWithoutExt = Path.GetFileNameWithoutExtension(originalPath);
             string extension = Path.GetExtension(originalPath);
             int counter = 1;
 
-            // Construct a new path with incremented filenames until a unique name is found.
             while (File.Exists(originalPath))
             {
                 string newFilename = $"{filenameWithoutExt}_{counter++}{extension}";
@@ -361,55 +458,7 @@ namespace PlexGifMaker.Data
 
             return originalPath;
         }
-        public async Task<List<Library>> GetLibrariesAsync()
-        {
-            var libraries = new List<Library>();
-            var client = _httpClientFactory.CreateClient();
-            var requestUri = $"{_baseUri}/library/sections?X-Plex-Token={_token}";
 
-            try
-            {
-                var response = await client.GetAsync(requestUri);
-                if (response.IsSuccessStatusCode)
-                {
-                    var content = await response.Content.ReadAsStringAsync();
-                    var doc = new XmlDocument();
-                    doc.LoadXml(content);
-                    if (doc is not null)
-                    {
-                        var videoNodes = doc.SelectNodes("//Directory");
-                        if (videoNodes is not null)
-                        {
-                            foreach (XmlNode node in videoNodes)
-                            {
-                                var id = node.Attributes?["key"]?.Value ?? string.Empty; // Fallback to empty string if null
-                                var title = node.Attributes?["title"]?.Value ?? "Untitled"; // Fallback to "Untitled" if null
-                                var type = node.Attributes?["type"]?.Value ?? "Unknown"; // Fallback to "Unknown" if null
-
-                                var library = new Library
-                                {
-                                    Id = id,
-                                    Title = title,
-                                    Type = type
-                                };
-
-                                libraries.Add(library);
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    // Log the error or handle it according to your error policy
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "An error occurred while fetching libraries.");
-            }
-
-            return libraries;
-        }
         public async Task<List<Episode>> GetShowsAsync(string libraryKey)
         {
             var items = new List<Episode>();
@@ -418,13 +467,11 @@ namespace PlexGifMaker.Data
                 var client = _httpClientFactory.CreateClient();
                 var requestUri = $"{_baseUri}/library/sections/{libraryKey}/all?X-Plex-Token={_token}";
                 var response = await client.GetAsync(requestUri);
-
                 if (response.IsSuccessStatusCode)
                 {
                     var content = await response.Content.ReadAsStringAsync();
                     var doc = new XmlDocument();
                     doc.LoadXml(content);
-
                     var directoryNodes = doc.SelectNodes("//Directory");
                     if (directoryNodes != null && directoryNodes.Count > 0)
                     {
@@ -432,36 +479,44 @@ namespace PlexGifMaker.Data
                         {
                             var id = node.Attributes?["ratingKey"]?.Value;
                             var title = node.Attributes?["title"]?.Value;
-
+                            var type = node.Attributes?["type"]?.Value;
                             if (id != null && title != null)
                             {
                                 items.Add(new Episode
                                 {
                                     Id = id,
                                     Title = title,
+                                    IsMovie = type?.Equals("movie", StringComparison.OrdinalIgnoreCase) ?? false
                                 });
                             }
                         }
-                        _logger.LogInformation("Fetched {ItemCount} shows from library {LibraryKey}", items.Count, libraryKey);
+                        _logger.LogInformation("Fetched {ItemCount} items from library {LibraryKey}", items.Count, libraryKey);
                     }
                     else
                     {
-                        _logger.LogWarning("No shows (directories) found in library {LibraryKey}. Treating as a flat structure.", libraryKey);
-                        return await GetMoviesAsync(libraryKey, true);
+                        _logger.LogWarning("No directories found in library {LibraryKey}. Treating as a flat structure.", libraryKey);
+                        items = await GetMoviesAsync(libraryKey, true);
                     }
+                }
+                else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    _logger.LogWarning("Unauthorized access attempt for library {LibraryKey}. Token may be invalid or user may lack permissions.", libraryKey);
+                    throw new UnauthorizedAccessException($"Unable to access library {libraryKey}. Your session may have expired or you may not have the necessary permissions.");
                 }
                 else
                 {
                     _logger.LogError("Failed to fetch content from library {LibraryKey}. Status code: {StatusCode}", libraryKey, response.StatusCode);
+                    throw new HttpRequestException($"Failed to fetch library content. Status code: {response.StatusCode}");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError("Failed to fetch content from library {LibraryKey}. Error Message: {ErrorMessage}", libraryKey, ex.Message);
+                _logger.LogError(ex, "Failed to fetch content from library {LibraryKey}", libraryKey);
+                throw;
             }
-
             return items;
         }
+
         public async Task<List<Episode>> GetMoviesAsync(string libraryKey, bool IsMovie)
         {
             var episodes = new List<Episode>();
@@ -523,18 +578,26 @@ namespace PlexGifMaker.Data
                         _logger.LogInformation("Fetched {EpisodeCount} movies from library {LibraryKey}.", episodes.Count, libraryKey);
                     }
                 }
+                else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    _logger.LogWarning("Unauthorized access attempt for library {LibraryKey}. Token may be invalid or user may lack permissions.", libraryKey);
+                    throw new UnauthorizedAccessException($"Unable to access library {libraryKey}. Your session may have expired or you may not have the necessary permissions.");
+                }
                 else
                 {
                     _logger.LogError("Failed to fetch movies from library {LibraryKey}. Status code: {StatusCode}", libraryKey, response.StatusCode);
+                    throw new HttpRequestException($"Failed to fetch movies. Status code: {response.StatusCode}");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError("Failed to fetch movies from library {LibraryKey}. Exception: {Exception}", libraryKey, ex);
+                _logger.LogError(ex, "Failed to fetch movies from library {LibraryKey}", libraryKey);
+                throw;
             }
 
             return episodes;
         }
+
         public async Task<TimeSpan> GetEpisodeDurationAsync(string episodeId)
         {
             if (string.IsNullOrEmpty(episodeId))
@@ -552,7 +615,6 @@ namespace PlexGifMaker.Data
                 var doc = new XmlDocument();
                 doc.LoadXml(content);
 
-                // Extract the duration from the episode metadata. Assuming duration is provided in milliseconds.
                 var node = doc.SelectSingleNode("//Video");
                 if (node?.Attributes?["duration"] != null)
                 {
@@ -570,9 +632,15 @@ namespace PlexGifMaker.Data
                     _logger.LogWarning("Duration attribute is missing for episode {EpisodeId}.", episodeId);
                 }
             }
+            else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                _logger.LogWarning("Unauthorized access attempt for episode {EpisodeId}. Token may be invalid or user may lack permissions.", episodeId);
+                throw new UnauthorizedAccessException($"Unable to access episode {episodeId}. Your session may have expired or you may not have the necessary permissions.");
+            }
             else
             {
                 _logger.LogError("Failed to fetch metadata for episode {EpisodeId}. Response status: {StatusCode}.", episodeId, response.StatusCode);
+                throw new HttpRequestException($"Failed to fetch episode metadata. Status code: {response.StatusCode}");
             }
 
             return TimeSpan.Zero;
@@ -585,8 +653,13 @@ namespace PlexGifMaker.Data
             var response = await client.GetAsync(metadataUrl);
             if (!response.IsSuccessStatusCode)
             {
+                if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                {
+                    _logger.LogWarning("Unauthorized access attempt for episode {EpisodeId}. Token may be invalid or user may lack permissions.", episodeId);
+                    throw new UnauthorizedAccessException($"Unable to access episode {episodeId}. Your session may have expired or you may not have the necessary permissions.");
+                }
                 _logger.LogError("Failed to fetch video metadata for episode {EpisodeId}. Status code: {StatusCode}", episodeId, response.StatusCode);
-                return new List<SubtitleItem>();
+                throw new HttpRequestException($"Failed to fetch video metadata. Status code: {response.StatusCode}");
             }
 
             var content = await response.Content.ReadAsStringAsync();
@@ -598,7 +671,7 @@ namespace PlexGifMaker.Data
             if (string.IsNullOrEmpty(key))
             {
                 _logger.LogError("Failed to locate video file key in metadata for episode {EpisodeId}.", episodeId);
-                return new List<SubtitleItem>();
+                throw new InvalidOperationException($"Failed to locate video file key for episode {episodeId}.");
             }
 
             List<SubtitleItem> items = new();
@@ -619,9 +692,8 @@ namespace PlexGifMaker.Data
             }
             catch (Exception e)
             {
-                _logger.LogError("Error extracting subtitles as .srt: {e.Message}", e.Message);
+                _logger.LogError(e, "Error extracting subtitles as .srt: {ErrorMessage}", e.Message);
                 // Attempt to extract as .sup
-                // Delete the failed .srt file
                 await DeleteSubtitleFilesAsync("subtitle.srt");
                 string outputFilenameSup = $"subtitle.sup";
                 string outputFilePathSup = Path.Combine(outputDir, outputFilenameSup);
@@ -634,12 +706,11 @@ namespace PlexGifMaker.Data
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError("Error extracting subtitles as .sup: {ex.Message}", ex.Message);
+                    _logger.LogError(ex, "Error extracting subtitles as .sup: {ErrorMessage}", ex.Message);
+                    throw;
                 }
                 if (File.Exists(outputFilePathSup))
                 {
-                    // Parsing .sup files is not supported directly, you might need to handle this case accordingly.
-                    // For example, you can log a message indicating that parsing .sup files is not supported.
                     _logger.LogWarning("Subtitle extraction as .srt failed, and parsing .sup files is not supported directly.");
                 }
             }
@@ -677,40 +748,58 @@ namespace PlexGifMaker.Data
             }
         }
 
-        // Define Subtitle and SubtitleCodec types if not already defined
-        public class Subtitle
+        public void RefreshToken()
         {
-            public string? Id { get; set; }
-            public string? Language { get; set; }
-            public string? Key { get; set; }
-            public string? DisplayTitle { get; set; }
-            public SubtitleCodec Codec { get; set; }
+            _logger.LogInformation("Attempting to refresh Plex token...");
+            throw new NotImplementedException("Token refresh not implemented. Please re-authenticate manually.");
         }
 
-        public enum SubtitleCodec
+        public async Task<bool> CheckLibraryAccessAsync(string libraryKey)
         {
-            Unknown,
-            SRT,
-            ASS,
-            // Add more codecs as needed
+            var client = _httpClientFactory.CreateClient();
+            var requestUri = $"{_baseUri}/library/sections/{libraryKey}?X-Plex-Token={_token}";
+
+            try
+            {
+                var response = await client.GetAsync(requestUri);
+                return response.IsSuccessStatusCode;
+            }
+            catch (HttpRequestException ex)
+            {
+                _logger.LogError(ex, "Error checking access to library {LibraryKey}", libraryKey);
+                return false;
+            }
         }
     }
+
     public class Library
     {
         public string? Id { get; set; }
         public string? Title { get; set; }
-        public string? Type { get; set; }  // Type of the library (movie, show, music, etc.)
+        public string? Type { get; set; }
+        public bool IsMovie { get; set; }
     }
+
     public class Episode
     {
         public string? Id { get; set; }
         public string? Title { get; set; }
-        // Additional attributes as needed
         public bool IsMovie { get; set; }
     }
-    public class SubtitleText
+
+    public class Subtitle
     {
-        public string? Text { get; set; }
-        // Additional attributes as needed
+        public string? Id { get; set; }
+        public string? Language { get; set; }
+        public string? Key { get; set; }
+        public string? DisplayTitle { get; set; }
+    }
+
+    public enum SubtitleCodec
+    {
+        Unknown,
+        SRT,
+        ASS,
+        // Add more codecs as needed
     }
 }

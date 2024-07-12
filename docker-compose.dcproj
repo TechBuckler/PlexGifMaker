@@ -12,5 +12,7 @@
   <ItemGroup>
     <None Include="docker-compose.yml" />
     <None Include=".dockerignore" />
+    <None Include="start.bat" />
+    <None Include="start.sh" />
   </ItemGroup>
 </Project>

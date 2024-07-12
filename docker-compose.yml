@@ -1,20 +1,17 @@
-
 services:
   plexgifmaker:
     build:
-      context: .  # This should be the root directory containing the 'PlexGifMaker' folder
+      context: .
       dockerfile: PlexGifMaker/Dockerfile
     image: plexgifmaker:latest
     ports:
-    -  "9000:9000"
+      - "9000:9000"
     volumes:
-      - plexgifmaker_keys:/usr/shared/plexgifmaker_keys
-      
+      - ${PLEXGIFMAKER_DATA_PATH:-./plexgifmaker_keys}:/usr/shared/plexgifmaker_keys
     restart: unless-stopped
     environment:
       - ASPNETCORE_URLS=http://+;http://+:9000
-      - FFREPORT=file=/app/logs/ffmpeg-$(date +%Y%m%s).log 
-
+      - FFREPORT=file="/logs/ffmpeg-$(date +%Y%m%s).log"
   ngrok:
     image: ngrok/ngrok:latest
     restart: unless-stopped
@@ -27,8 +24,3 @@ services:
       - ./ngrok.yml:/home/ngrok/.config/ngrok/ngrok.yml
     depends_on:
       - plexgifmaker
-
-volumes:
-  plexgifmaker_keys:
-    name: plexgifmaker_keys
-    external: true

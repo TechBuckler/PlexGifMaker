@@ -1,0 +1,27 @@
+﻿@using PlexGifMaker.Data
+
+<div class="form-group">
+    <label for="subtitle">Subtitle Stream: </label>
+    <select class="form-control" id="subtitle" @onchange="OnSelectedSubtitleChanged">
+        <option value="">Select a subtitle</option>
+        @foreach (var subtitle in SubtitleOptions.Select((value, index) => new { Value = value, Index = index }))
+        {
+            <option value="@(string.IsNullOrEmpty(subtitle?.Value?.Key) ? subtitle?.Index.ToString() : subtitle.Value.Key)">
+                @subtitle?.Value?.Language - @subtitle?.Value?.DisplayTitle
+            </option>
+        }
+    </select>
+</div>
+
+@code {
+    [Parameter]
+    public List<Subtitle?> SubtitleOptions { get; set; } = new List<Subtitle?>();
+
+    [Parameter]
+    public EventCallback<string> OnSubtitleSelected { get; set; }
+
+    private async Task OnSelectedSubtitleChanged(ChangeEventArgs e)
+    {
+        await OnSubtitleSelected.InvokeAsync(e.Value?.ToString());
+    }
+}

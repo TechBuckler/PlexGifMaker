@@ -1,0 +1,28 @@
+﻿@using PlexGifMaker.Data
+
+<div class="form-group">
+    <label for="library">Library: </label>
+    <select class="form-control" id="library" @onchange="OnSelectedLibraryChanged">
+        <option value="">Select a library</option>
+        @if (Libraries != null)
+        {
+            @foreach (var library in Libraries)
+            {
+                <option value="@library.Id">@library.Title</option>
+            }
+        }
+    </select>
+</div>
+
+@code {
+    [Parameter]
+    public List<Library>? Libraries { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnLibrarySelected { get; set; }
+
+    private async Task OnSelectedLibraryChanged(ChangeEventArgs e)
+    {
+        await OnLibrarySelected.InvokeAsync(e.Value?.ToString());
+    }
+}
