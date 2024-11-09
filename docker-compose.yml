@@ -12,15 +12,15 @@ services:
     environment:
       - ASPNETCORE_URLS=http://+;http://+:9000
       - FFREPORT=file="/logs/ffmpeg-$(date +%Y%m%s).log"
-  ngrok:
-    image: ngrok/ngrok:latest
-    restart: unless-stopped
-    command:
-      - "start"
-      - "localhost"
-      - "--config"
-      - "/home/ngrok/.config/ngrok/ngrok.yml"
-    volumes:
-      - ./ngrok.yml:/home/ngrok/.config/ngrok/ngrok.yml
-    depends_on:
-      - plexgifmaker
+  # ngrok:
+  #   image: ngrok/ngrok:latest
+  #   restart: unless-stopped
+  #   command:
+  #     - "start"
+  #     - "localhost"
+  #     - "--config"
+  #     - "/home/ngrok/.config/ngrok/ngrok.yml"
+  #   volumes:
+  #     - ./ngrok.yml:/home/ngrok/.config/ngrok/ngrok.yml
+  #   depends_on:
+  #     - plexgifmaker

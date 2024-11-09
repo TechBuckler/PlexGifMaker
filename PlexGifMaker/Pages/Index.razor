@@ -76,57 +76,61 @@ else
 
         private GifCreator? gifCreatorRef;
 
-        private async Task CreateGif((int startTime, int endTime) times)
+   private async Task CreateGif((int startTime, int endTime) times)
+{
+    if (string.IsNullOrEmpty(selectedEpisode))
+    {
+        errorMessage = "Please select all the necessary options before creating a GIF.";
+        StateHasChanged();
+        return;
+    }
+
+    isCreatingGif = true;
+    errorMessage = null;
+    gifPath = null;
+    StateHasChanged();
+
+    try
+    {
+        string? newGifPath;
+        if (selectedSubtitleOptionKey != null)
         {
-            if (string.IsNullOrEmpty(selectedEpisode))
-            {
-                errorMessage = "Please select all the necessary options before creating a GIF.";
-                StateHasChanged();
-                return;
-            }
-
-            isCreatingGif = true;
-            errorMessage = null;
-            gifPath = null;
-            StateHasChanged();
-
-            try
-            {
-                string? newGifPath;
-                if (selectedSubtitleOptionKey != null)
-                {
-                    newGifPath = await PlexService.CreateGifFromSubtitlesAsync(selectedEpisode, times.startTime, times.endTime, selectedSubtitleOptionKey);
-                }
-                else
-                {
-                    newGifPath = await PlexService.CreateGifFromSubtitlesAsync(selectedEpisode, times.startTime, times.endTime);
-                }
-
-                if (!string.IsNullOrEmpty(newGifPath))
-                {
-                    // Ensure the GifPath starts with a forward slash for web URLs
-                    gifPath = gifPath?.Replace(@"/wwwroot", "");
-                    gifPath = newGifPath.StartsWith("/") ? newGifPath : "/" + newGifPath;
-                    _logger.LogInformation($"GIF created successfully. Path: {gifPath}");
-                }
-                else
-                {
-                    errorMessage = "Failed to generate GIF. The service returned an empty path.";
-                    _logger.LogWarning("GIF creation failed. Empty path returned from service.");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error creating GIF");
-                errorMessage = "An error occurred while creating the GIF. Please try again.";
-                gifPath = null;
-            }
-            finally
-            {
-                isCreatingGif = false;
-                StateHasChanged();
-            }
+            newGifPath = await PlexService.CreateGifFromSubtitlesAsync(selectedEpisode, times.startTime, times.endTime, selectedSubtitleOptionKey);
         }
+        else
+        {
+            newGifPath = await PlexService.CreateGifFromSubtitlesAsync(selectedEpisode, times.startTime, times.endTime);
+        }
+
+        if (!string.IsNullOrEmpty(newGifPath))
+        {
+            // Remove "/wwwroot/" prefix if it exists
+            newGifPath = newGifPath.Replace("wwwroot/", "");
+            _logger.LogInformation($"Modified GIF Path: {newGifPath}");
+
+            // Ensure the gifPath starts with a forward slash
+            gifPath = newGifPath.StartsWith("/") ? newGifPath : "/" + newGifPath;
+            _logger.LogInformation($"Final GIF Path for display: {gifPath}");
+        }
+        else
+        {
+            errorMessage = "Failed to generate GIF. The service returned an empty path.";
+            _logger.LogWarning("GIF creation failed. Empty path returned from service.");
+        }
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError(ex, "Error creating GIF");
+        errorMessage = "An error occurred while creating the GIF. Please try again.";
+        gifPath = null;
+    }
+    finally
+    {
+        isCreatingGif = false;
+        StateHasChanged();
+    }
+}
+
 
         // When you need to set subtitle times from the parent component:
         private void SetSubtitleTimes(int startTime, int endTime)
